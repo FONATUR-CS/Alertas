@@ -12,6 +12,10 @@ let audioChunks = [];
 let history = [];
 let currentAlertText = "";
 
+// Variables para "recordar" el archivo si falta la clave
+let pendingBlob = null;
+let pendingFileName = "";
+
 // --- DOM Elements ---
 const btnRecord = document.getElementById('btn-record');
 const btnStop = document.getElementById('btn-stop');
@@ -20,7 +24,7 @@ const btnClearHistory = document.getElementById('btn-clear-history');
 const btnCopy = document.getElementById('btn-copy');
 const btnCopyText = document.getElementById('btn-copy-text');
 const btnSettings = document.getElementById('btn-settings');
-const btnTraining = document.getElementById('btn-training'); // Nuevo botón
+const btnTraining = document.getElementById('btn-training'); 
 
 // Modal Elements (API Key)
 const apiModal = document.getElementById('api-modal');
@@ -50,7 +54,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     loadHistory();
     checkApiKey();
-    loadTrainingData(); // Cargar ejemplos guardados
+    loadTrainingData();
 });
 
 // --- API Key Management ---
@@ -61,13 +65,18 @@ function getApiKey() {
 function checkApiKey() {
     const key = getApiKey();
     if (!key) {
-        showModal();
+        // No mostramos el modal de inmediato al cargar para no ser invasivos,
+        // solo cuando se intenta una acción o se hace clic en settings.
+        // Pero si el input está vacío, lo limpiamos.
+        apiKeyInput.value = "";
     } else {
         apiKeyInput.value = key;
     }
 }
 
 function showModal() {
+    const key = getApiKey();
+    if (key) apiKeyInput.value = key; // Mostrar la clave actual si existe
     apiModal.classList.remove('hidden');
 }
 
@@ -77,13 +86,23 @@ function hideModal() {
 
 btnSaveKey.addEventListener('click', () => {
     const key = apiKeyInput.value.trim();
-    if (key.startsWith('AIza') && key.length > 20) {
+    if (key.length > 10) { // Validación básica
         localStorage.setItem('fonatur_gemini_key', key);
         hideModal();
-        showError("Clave guardada correctamente.", false);
         errorBanner.classList.add('hidden');
+        
+        // REANUDAR OPERACIÓN PENDIENTE
+        if (pendingBlob) {
+            showError("Reanudando procesamiento...", false); // Mensaje temporal
+            processAudio(pendingBlob, pendingFileName);
+            // Limpiar pendientes
+            pendingBlob = null;
+            pendingFileName = "";
+        } else {
+            showError("Clave guardada. Ahora puedes subir tu archivo.", false);
+        }
     } else {
-        alert("Por favor, ingresa una API Key válida (comienza con AIza...)");
+        alert("Por favor, ingresa una API Key válida.");
     }
 });
 
@@ -213,9 +232,12 @@ function showError(msg, isError = true) {
         emptyState.classList.remove('hidden'); // Go back to start
     }
     
-    setTimeout(() => {
-        errorBanner.classList.add('hidden');
-    }, 5000);
+    // Auto ocultar solo si no es un error crítico
+    if (!isError || msg.includes('guardada')) {
+        setTimeout(() => {
+            errorBanner.classList.add('hidden');
+        }, 5000);
+    }
 }
 
 // --- Audio & AI Logic ---
@@ -231,10 +253,12 @@ function getCurrentDateFormatted() {
 }
 
 async function processAudio(blob, fileName = "Audio Institucional") {
-    // 1. Obtener clave del almacenamiento local
     const apiKey = getApiKey();
     
+    // Si no hay API Key, guardamos el intento y pedimos la clave
     if (!apiKey) {
+        pendingBlob = blob;
+        pendingFileName = fileName;
         showModal();
         return;
     }
@@ -242,7 +266,6 @@ async function processAudio(blob, fileName = "Audio Institucional") {
     setLoading(true);
     const systemDate = getCurrentDateFormatted();
     
-    // 2. Obtener ejemplos de entrenamiento
     const userExamples = localStorage.getItem('fonatur_style_examples') || "";
     let trainingContext = "";
     if (userExamples.trim().length > 0) {
@@ -265,7 +288,6 @@ async function processAudio(blob, fileName = "Audio Institucional") {
 
             const ai = new GoogleGenAI({ apiKey: apiKey });
             
-            // Prompt enriquecido con ejemplos
             const prompt = `
               Actúa como un redactor senior de Comunicación Social. Tu tarea es escuchar el audio adjunto y generar una 'Alerta de Prensa' de alta calidad periodística.
 
@@ -299,7 +321,6 @@ async function processAudio(blob, fileName = "Audio Institucional") {
             `;
 
             try {
-                // USAR STREAMING PARA MEJOR VELOCIDAD PERCIBIDA
                 const responseStream = await ai.models.generateContentStream({
                     model: 'gemini-3-flash-preview',
                     contents: {
@@ -319,7 +340,6 @@ async function processAudio(blob, fileName = "Audio Institucional") {
                         fullText += chunkText;
 
                         if (isFirstChunk) {
-                            // Al recibir el primer byte, ocultar loading y mostrar el papel
                             loadingState.classList.add('hidden');
                             resultContainer.classList.remove('hidden');
                             emptyState.classList.add('hidden');
@@ -327,7 +347,6 @@ async function processAudio(blob, fileName = "Audio Institucional") {
                             isFirstChunk = false;
                         }
                         
-                        // Actualizar texto en tiempo real
                         alertContent.innerText = fullText;
                     }
                 }
@@ -344,14 +363,21 @@ async function processAudio(blob, fileName = "Audio Institucional") {
 
             } catch (err) {
                 console.error(err);
-                // Manejo especial si la API Key es inválida
-                if (err.message && (err.message.includes('403') || err.message.includes('API key'))) {
-                    localStorage.removeItem('fonatur_gemini_key');
-                    showError("API Key inválida o expirada. Por favor ingrésala nuevamente.");
-                    showModal();
-                } else {
-                    showError("Error de IA: " + (err.message || "No se pudo conectar"));
+                
+                // MEJORA EN EL MANEJO DE ERRORES:
+                // No borramos la clave automáticamente, para que el usuario pueda revisarla.
+                let msg = "Error de IA: " + (err.message || "Desconocido");
+                
+                if (err.message && (err.message.includes('403') || err.message.includes('API key') || err.message.includes('permission'))) {
+                    msg = "Error de Autorización (403): Verifica que tu API Key sea correcta y que tengas permisos para usar el modelo Gemini.";
+                    showModal(); // Volvemos a mostrar el modal para que corrijan
+                } else if (err.message && err.message.includes('429')) {
+                    msg = "Límite de cuota excedido (429). Espera unos minutos.";
+                } else if (err.message && err.message.includes('503')) {
+                    msg = "El servicio está saturado temporalmente (503). Intenta de nuevo.";
                 }
+
+                showError(msg);
             }
         };
     } catch (err) {
