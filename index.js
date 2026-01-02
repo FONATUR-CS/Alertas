@@ -230,8 +230,66 @@ function showError(msg, isError = true) {
             errorBanner.classList.add('hidden');
         }, 5000);
     }
-    // Si es un error, dejamos que el usuario lo lea y cierre o que se cierre al hacer otra acción
 }
+
+// --- Helper: Mime Type ---
+function getMimeType(blob, fileName) {
+    // Si el navegador detectó el tipo, confiamos en él, excepto si es genérico
+    if (blob.type && blob.type !== 'application/octet-stream') {
+        return blob.type;
+    }
+    
+    // Fallback basado en extensión
+    const ext = fileName.split('.').pop().toLowerCase();
+    const mimeMap = {
+        'mp3': 'audio/mp3',
+        'wav': 'audio/wav',
+        'm4a': 'audio/mp4',
+        'mp4': 'video/mp4', // GenAI soporta video/mp4
+        'webm': 'audio/webm',
+        'ogg': 'audio/ogg',
+        'aac': 'audio/aac',
+        'flac': 'audio/flac',
+        'mpeg': 'audio/mpeg',
+        'mov': 'video/mov',
+        'avi': 'video/avi'
+    };
+    
+    return mimeMap[ext] || 'audio/mp3'; // Default seguro
+}
+
+// --- Helper: Parse Error ---
+function parseErrorMessage(err) {
+    let rawMessage = err.message || "Error desconocido";
+    let finalMessage = rawMessage;
+
+    // Intentar parsear JSON anidado
+    try {
+        if (rawMessage.includes('{')) {
+            // A veces el mensaje es un string que contiene JSON
+            const jsonStart = rawMessage.indexOf('{');
+            const jsonPart = rawMessage.substring(jsonStart);
+            const parsed = JSON.parse(jsonPart);
+            
+            if (parsed.error) {
+                if (parsed.error.message) {
+                    // A veces el inner message también es JSON string
+                    try {
+                        const inner = JSON.parse(parsed.error.message);
+                        finalMessage = inner.error.message || parsed.error.message;
+                    } catch {
+                        finalMessage = parsed.error.message;
+                    }
+                }
+            }
+        }
+    } catch (e) {
+        // Fallback al rawMessage
+    }
+
+    return finalMessage;
+}
+
 
 // --- Audio & AI Logic ---
 function getCurrentDateFormatted() {
@@ -278,7 +336,14 @@ async function processAudio(blob, fileName = "Audio Institucional") {
         const reader = new FileReader();
         reader.readAsDataURL(blob);
         reader.onloadend = async () => {
+            // Validar base64
+            if (!reader.result) {
+                showError("Error al leer el archivo. Intente de nuevo.");
+                return;
+            }
+
             const base64Data = reader.result.split(',')[1];
+            const mimeType = getMimeType(blob, fileName);
 
             const ai = new GoogleGenAI({ apiKey: apiKey });
             
@@ -320,7 +385,7 @@ async function processAudio(blob, fileName = "Audio Institucional") {
                     model: 'gemini-3-flash-preview',
                     contents: {
                         parts: [
-                            { inlineData: { data: base64Data, mimeType: blob.type || 'audio/webm' } },
+                            { inlineData: { data: base64Data, mimeType: mimeType } },
                             { text: prompt }
                         ]
                     }
@@ -363,27 +428,28 @@ async function processAudio(blob, fileName = "Audio Institucional") {
             } catch (err) {
                 console.error("Error GenAI:", err);
                 
-                let msg = "Error de IA: " + (err.message || "Desconocido");
+                const rawError = parseErrorMessage(err);
+                let msg = "Error de IA: " + rawError;
                 let isAuthError = false;
 
-                // Detección mejorada de errores de Auth
-                if (err.message && (err.message.includes('403') || err.message.includes('API key') || err.message.includes('permission') || err.message.includes('key not valid') || err.message.includes('400'))) {
-                    msg = "Error de Autenticación: Google rechazó la API Key. Verifica que la clave sea correcta y tenga permisos para 'Gemini 1.5 Flash'.";
+                // Detección mejorada de errores
+                if (rawError.includes('403') || rawError.includes('API key') || rawError.includes('permission') || rawError.includes('key not valid') || rawError.includes('400')) {
+                    msg = "Error de Autenticación: Google rechazó la API Key. Verifica que la clave sea correcta.";
                     isAuthError = true;
-                } else if (err.message && err.message.includes('429')) {
+                } else if (rawError.includes('429')) {
                     msg = "Límite de cuota excedido (429). Espera unos minutos.";
-                } else if (err.message && err.message.includes('503')) {
-                    msg = "Servicio no disponible (503). Intenta de nuevo.";
+                } else if (rawError.includes('503')) {
+                    msg = "Servicio no disponible (503). Intenta de nuevo más tarde.";
+                } else if (rawError.includes('500') || rawError.includes('Internal error')) {
+                    msg = "Error Interno de Google (500). El archivo podría ser demasiado complejo o tener un formato de video no compatible. Intenta convertirlo a MP3 o reducir su tamaño.";
                 }
 
                 showError(msg);
 
                 if (isAuthError) {
-                    // Mantenemos el archivo en memoria para reintentar
+                    // Mantenemos el archivo en memoria pero NO abrimos modal auto
                     pendingBlob = blob;
                     pendingFileName = fileName;
-                    // IMPORTANTE: NO abrimos el modal automáticamente para evitar el bucle.
-                    // El usuario debe abrirlo manualmente si quiere corregirlo.
                 } else {
                     // Si es otro error, limpiamos
                     pendingBlob = null;
@@ -433,6 +499,14 @@ btnStop.addEventListener('click', () => {
 fileInput.addEventListener('change', (e) => {
     const file = e.target.files[0];
     if (file) {
+        // Límite de seguridad: 15MB para asegurar que con base64 no pase de 20MB
+        const MAX_SIZE = 15 * 1024 * 1024; 
+        if (file.size > MAX_SIZE) {
+            showError("El archivo es demasiado grande (>15MB). Por favor comprímalo o use audio MP3.", true);
+            fileInput.value = '';
+            return;
+        }
+
         processAudio(file, file.name);
     }
     fileInput.value = '';
