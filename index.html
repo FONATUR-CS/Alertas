@@ -67,6 +67,11 @@
             </div>
             
             <div class="flex items-center gap-4">
+                <!-- Training / Examples Button -->
+                <button id="btn-training" class="p-2 text-gray-400 hover:text-[#bd9751] transition-colors" title="Entrenamiento y Estilo">
+                    <i data-lucide="book-open-check" class="w-5 h-5"></i>
+                </button>
+
                 <!-- API Key Settings Button -->
                 <button id="btn-settings" class="p-2 text-gray-400 hover:text-[#bd9751] transition-colors" title="Configurar API Key">
                     <i data-lucide="key" class="w-5 h-5"></i>
@@ -176,6 +181,40 @@
             <div class="flex justify-end gap-2">
                 <button id="btn-save-key" class="bg-[#bd9751] text-[#0b231e] px-4 py-2 rounded font-bold hover:bg-[#a68444] transition-colors w-full">
                     GUARDAR CREDENCIAL
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Training/Style Modal -->
+    <div id="training-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-[#0b231e] border border-[#1a3d35] rounded-lg shadow-2xl w-full max-w-2xl p-6 flex flex-col max-h-[90vh]">
+            <div class="flex items-center justify-between mb-4">
+                <div class="flex items-center gap-3 text-[#bd9751]">
+                    <i data-lucide="book-open-check" class="w-6 h-6"></i>
+                    <h3 class="text-lg font-bold uppercase tracking-wider">Entrenamiento de Estilo</h3>
+                </div>
+                <button id="btn-close-training" class="text-gray-500 hover:text-white">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            
+            <p class="text-gray-400 text-sm mb-4">
+                Pegue aquí ejemplos de alertas o boletines anteriores aprobados. La IA usará esto como referencia para imitar el tono, vocabulario y estructura.
+            </p>
+            
+            <div class="flex-1 mb-4 flex flex-col">
+                <label class="block text-xs font-bold text-gray-500 uppercase mb-2">Ejemplos de Redacción (Few-Shot)</label>
+                <textarea id="training-input" class="flex-1 w-full bg-[#05110e] border border-[#1a3d35] text-white p-4 rounded focus:outline-none focus:border-[#bd9751] transition-colors font-mono text-sm leading-relaxed resize-none h-64" placeholder="Ejemplo 1:
+FONATUR INFORMA... [Texto del ejemplo]
+
+Ejemplo 2:
+ALERTA DE PRENSA... [Texto del ejemplo]"></textarea>
+            </div>
+            
+            <div class="flex justify-end gap-2">
+                <button id="btn-save-training" class="bg-[#bd9751] text-[#0b231e] px-6 py-2.5 rounded font-bold hover:bg-[#a68444] transition-colors">
+                    GUARDAR EJEMPLOS
                 </button>
             </div>
         </div>
