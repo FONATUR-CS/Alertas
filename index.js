@@ -1,21 +1,11 @@
 import { GoogleGenAI } from "@google/genai";
 
 // ==========================================
-// ⚠️ CONFIGURACIÓN OBLIGATORIA ⚠️
+// SEGURIDAD: GESTIÓN DE API KEY
 // ==========================================
-// Para que la app funcione en GitHub Pages, debes pegar tu API Key aquí abajo.
-// 1. Ve a https://aistudio.google.com/app/apikey
-// 2. Copia tu clave (empieza con "AIza...")
-// 3. Reemplaza el texto 'PEGAR_AQUI_TU_CLAVE' con tu clave real.
+// Ya NO hay claves hardcodeadas aquí.
+// La clave se pide al usuario y se guarda en localStorage.
 // ==========================================
-const CLAVE_GOOGLE = 'AIzaSyCsIgT2eRSDOvrDxtnk27CdyoYSG8Q7qgc'; 
-// ==========================================
-
-
-// Configuración del entorno (compatible con Local y GitHub Pages)
-const API_KEY = (typeof process !== 'undefined' && process.env && process.env.API_KEY) 
-    ? process.env.API_KEY 
-    : CLAVE_GOOGLE;
 
 let mediaRecorder = null;
 let audioChunks = [];
@@ -29,6 +19,12 @@ const fileInput = document.getElementById('file-input');
 const btnClearHistory = document.getElementById('btn-clear-history');
 const btnCopy = document.getElementById('btn-copy');
 const btnCopyText = document.getElementById('btn-copy-text');
+const btnSettings = document.getElementById('btn-settings'); // Nuevo botón
+
+// Modal Elements
+const apiModal = document.getElementById('api-modal');
+const apiKeyInput = document.getElementById('api-key-input');
+const btnSaveKey = document.getElementById('btn-save-key');
 
 const emptyState = document.getElementById('empty-state');
 const loadingState = document.getElementById('loading-state');
@@ -46,6 +42,45 @@ document.addEventListener('DOMContentLoaded', () => {
         window.lucide.createIcons();
     }
     loadHistory();
+    checkApiKey(); // Verificar si ya tenemos clave al iniciar
+});
+
+// --- API Key Management ---
+function getApiKey() {
+    return localStorage.getItem('fonatur_gemini_key');
+}
+
+function checkApiKey() {
+    const key = getApiKey();
+    if (!key) {
+        showModal();
+    } else {
+        apiKeyInput.value = key; // Pre-llenar input si existe
+    }
+}
+
+function showModal() {
+    apiModal.classList.remove('hidden');
+}
+
+function hideModal() {
+    apiModal.classList.add('hidden');
+}
+
+btnSaveKey.addEventListener('click', () => {
+    const key = apiKeyInput.value.trim();
+    if (key.startsWith('AIza') && key.length > 20) {
+        localStorage.setItem('fonatur_gemini_key', key);
+        hideModal();
+        showError("Clave guardada correctamente.", false); // Mensaje informativo discreto si usáramos toast, pero aquí solo limpia error
+        errorBanner.classList.add('hidden'); // Ocultar errores previos
+    } else {
+        alert("Por favor, ingresa una API Key válida (comienza con AIza...)");
+    }
+});
+
+btnSettings.addEventListener('click', () => {
+    showModal();
 });
 
 // --- History Management ---
@@ -130,12 +165,15 @@ function showResult(text) {
     window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
-function showError(msg) {
+function showError(msg, isError = true) {
     errorMessage.textContent = msg;
     errorBanner.classList.remove('hidden');
-    setLoading(false); // Reset buttons
-    loadingState.classList.add('hidden');
-    emptyState.classList.remove('hidden'); // Go back to start
+    
+    if (isError) {
+        setLoading(false); // Reset buttons
+        loadingState.classList.add('hidden');
+        emptyState.classList.remove('hidden'); // Go back to start
+    }
     
     setTimeout(() => {
         errorBanner.classList.add('hidden');
@@ -155,6 +193,14 @@ function getCurrentDateFormatted() {
 }
 
 async function processAudio(blob, fileName = "Audio Institucional") {
+    // 1. Obtener clave del almacenamiento local
+    const apiKey = getApiKey();
+    
+    if (!apiKey) {
+        showModal();
+        return;
+    }
+
     setLoading(true);
     const systemDate = getCurrentDateFormatted();
 
@@ -163,14 +209,8 @@ async function processAudio(blob, fileName = "Audio Institucional") {
         reader.readAsDataURL(blob);
         reader.onloadend = async () => {
             const base64Data = reader.result.split(',')[1];
-            
-            // Validar API Key antes de llamar
-            if (!API_KEY || API_KEY === 'PEGAR_AQUI_TU_CLAVE') {
-                showError("⚠️ FALTA TU API KEY. Abre index.js y pega tu clave en la línea 11.");
-                return;
-            }
 
-            const ai = new GoogleGenAI({ apiKey: API_KEY });
+            const ai = new GoogleGenAI({ apiKey: apiKey });
             const prompt = `
               Actúa como un redactor senior de Comunicación Social. Tu tarea es escuchar el audio adjunto y generar una 'Alerta de Prensa' de alta calidad periodística.
 
@@ -238,9 +278,7 @@ async function processAudio(blob, fileName = "Audio Institucional") {
                 if (fullText) {
                     currentAlertText = fullText;
                     saveToHistory(fullText, fileName);
-                    // Habilitar botones de nuevo
-                    setLoading(false); // Esto resetea botones y textos
-                    // Asegurarnos que la vista correcta se mantiene
+                    setLoading(false);
                     loadingState.classList.add('hidden');
                     resultContainer.classList.remove('hidden');
                 } else {
@@ -249,7 +287,14 @@ async function processAudio(blob, fileName = "Audio Institucional") {
 
             } catch (err) {
                 console.error(err);
-                showError("Error de IA: " + (err.message || "No se pudo conectar"));
+                // Manejo especial si la API Key es inválida
+                if (err.message && (err.message.includes('403') || err.message.includes('API key'))) {
+                    localStorage.removeItem('fonatur_gemini_key');
+                    showError("API Key inválida o expirada. Por favor ingrésala nuevamente.");
+                    showModal();
+                } else {
+                    showError("Error de IA: " + (err.message || "No se pudo conectar"));
+                }
             }
         };
     } catch (err) {
@@ -269,7 +314,6 @@ btnRecord.addEventListener('click', async () => {
         };
 
         mediaRecorder.onstop = () => {
-            // Usar webm para mayor compatibilidad
             const blob = new Blob(audioChunks, { type: 'audio/webm' });
             processAudio(blob, "Grabación Fonatur");
             stream.getTracks().forEach(track => track.stop());
@@ -296,7 +340,6 @@ fileInput.addEventListener('change', (e) => {
     if (file) {
         processAudio(file, file.name);
     }
-    // Reset input so same file can be selected again
     fileInput.value = '';
 });
 
