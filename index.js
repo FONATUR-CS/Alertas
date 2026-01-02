@@ -1,11 +1,21 @@
 import { GoogleGenAI } from "@google/genai";
 
-// --- Configuración y Variables de Estado ---
-// NOTA IMPORTANTE PARA GITHUB PAGES:
-// En un entorno de servidor estático (como GitHub Pages), 'process' no existe.
-// Debes reemplazar la siguiente línea con tu API Key real entre comillas para que funcione.
-// Ejemplo: const API_KEY = "AIzaSyDxxxx...";
-const API_KEY = (typeof process !== 'undefined' && process.env) ? process.env.API_KEY : 'TU_API_KEY_AQUI';
+// ==========================================
+// ⚠️ CONFIGURACIÓN OBLIGATORIA ⚠️
+// ==========================================
+// Para que la app funcione en GitHub Pages, debes pegar tu API Key aquí abajo.
+// 1. Ve a https://aistudio.google.com/app/apikey
+// 2. Copia tu clave (empieza con "AIza...")
+// 3. Reemplaza el texto 'PEGAR_AQUI_TU_CLAVE' con tu clave real.
+// ==========================================
+const CLAVE_GOOGLE = 'AIzaSyCsIgT2eRSDOvrDxtnk27CdyoYSG8Q7qgc'; 
+// ==========================================
+
+
+// Configuración del entorno (compatible con Local y GitHub Pages)
+const API_KEY = (typeof process !== 'undefined' && process.env && process.env.API_KEY) 
+    ? process.env.API_KEY 
+    : CLAVE_GOOGLE;
 
 let mediaRecorder = null;
 let audioChunks = [];
@@ -155,8 +165,8 @@ async function processAudio(blob, fileName = "Audio Institucional") {
             const base64Data = reader.result.split(',')[1];
             
             // Validar API Key antes de llamar
-            if (!API_KEY || API_KEY === 'TU_API_KEY_AQUI') {
-                showError("API Key no configurada. Edita index.js.");
+            if (!API_KEY || API_KEY === 'PEGAR_AQUI_TU_CLAVE') {
+                showError("⚠️ FALTA TU API KEY. Abre index.js y pega tu clave en la línea 11.");
                 return;
             }
 
