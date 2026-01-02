@@ -19,12 +19,19 @@ const fileInput = document.getElementById('file-input');
 const btnClearHistory = document.getElementById('btn-clear-history');
 const btnCopy = document.getElementById('btn-copy');
 const btnCopyText = document.getElementById('btn-copy-text');
-const btnSettings = document.getElementById('btn-settings'); // Nuevo botón
+const btnSettings = document.getElementById('btn-settings');
+const btnTraining = document.getElementById('btn-training'); // Nuevo botón
 
-// Modal Elements
+// Modal Elements (API Key)
 const apiModal = document.getElementById('api-modal');
 const apiKeyInput = document.getElementById('api-key-input');
 const btnSaveKey = document.getElementById('btn-save-key');
+
+// Modal Elements (Training)
+const trainingModal = document.getElementById('training-modal');
+const trainingInput = document.getElementById('training-input');
+const btnSaveTraining = document.getElementById('btn-save-training');
+const btnCloseTraining = document.getElementById('btn-close-training');
 
 const emptyState = document.getElementById('empty-state');
 const loadingState = document.getElementById('loading-state');
@@ -42,7 +49,8 @@ document.addEventListener('DOMContentLoaded', () => {
         window.lucide.createIcons();
     }
     loadHistory();
-    checkApiKey(); // Verificar si ya tenemos clave al iniciar
+    checkApiKey();
+    loadTrainingData(); // Cargar ejemplos guardados
 });
 
 // --- API Key Management ---
@@ -55,7 +63,7 @@ function checkApiKey() {
     if (!key) {
         showModal();
     } else {
-        apiKeyInput.value = key; // Pre-llenar input si existe
+        apiKeyInput.value = key;
     }
 }
 
@@ -72,8 +80,8 @@ btnSaveKey.addEventListener('click', () => {
     if (key.startsWith('AIza') && key.length > 20) {
         localStorage.setItem('fonatur_gemini_key', key);
         hideModal();
-        showError("Clave guardada correctamente.", false); // Mensaje informativo discreto si usáramos toast, pero aquí solo limpia error
-        errorBanner.classList.add('hidden'); // Ocultar errores previos
+        showError("Clave guardada correctamente.", false);
+        errorBanner.classList.add('hidden');
     } else {
         alert("Por favor, ingresa una API Key válida (comienza con AIza...)");
     }
@@ -82,6 +90,38 @@ btnSaveKey.addEventListener('click', () => {
 btnSettings.addEventListener('click', () => {
     showModal();
 });
+
+// --- Training / Style Management ---
+function loadTrainingData() {
+    const examples = localStorage.getItem('fonatur_style_examples');
+    if (examples) {
+        trainingInput.value = examples;
+    }
+}
+
+btnTraining.addEventListener('click', () => {
+    trainingModal.classList.remove('hidden');
+});
+
+btnCloseTraining.addEventListener('click', () => {
+    trainingModal.classList.add('hidden');
+});
+
+btnSaveTraining.addEventListener('click', () => {
+    const examples = trainingInput.value;
+    localStorage.setItem('fonatur_style_examples', examples);
+    trainingModal.classList.add('hidden');
+    showError("Ejemplos de estilo guardados.", false);
+    setTimeout(() => errorBanner.classList.add('hidden'), 2000);
+});
+
+// Cerrar modal al hacer clic fuera
+trainingModal.addEventListener('click', (e) => {
+    if (e.target === trainingModal) {
+        trainingModal.classList.add('hidden');
+    }
+});
+
 
 // --- History Management ---
 function loadHistory() {
@@ -147,8 +187,6 @@ function setLoading(isLoading) {
         const loadingText = loadingState.querySelector('h3');
         if (loadingText) loadingText.textContent = "Subiendo y analizando...";
     } else {
-        // Nota: No ocultamos loadingState aquí directamente si estamos en streaming, 
-        // lo hacemos cuando llega el primer chunk.
         btnRecord.disabled = false;
         fileInput.disabled = false;
         const loadingText = loadingState.querySelector('h3');
@@ -203,6 +241,21 @@ async function processAudio(blob, fileName = "Audio Institucional") {
 
     setLoading(true);
     const systemDate = getCurrentDateFormatted();
+    
+    // 2. Obtener ejemplos de entrenamiento
+    const userExamples = localStorage.getItem('fonatur_style_examples') || "";
+    let trainingContext = "";
+    if (userExamples.trim().length > 0) {
+        trainingContext = `
+        IMPORTANTE - REFERENCIAS DE ESTILO:
+        A continuación se presentan ejemplos de redacción aprobados. 
+        Analiza el tono, la estructura de los párrafos y el vocabulario institucional de estos ejemplos e IMITA este estilo en tu respuesta:
+        
+        """
+        ${userExamples}
+        """
+        `;
+    }
 
     try {
         const reader = new FileReader();
@@ -211,6 +264,8 @@ async function processAudio(blob, fileName = "Audio Institucional") {
             const base64Data = reader.result.split(',')[1];
 
             const ai = new GoogleGenAI({ apiKey: apiKey });
+            
+            // Prompt enriquecido con ejemplos
             const prompt = `
               Actúa como un redactor senior de Comunicación Social. Tu tarea es escuchar el audio adjunto y generar una 'Alerta de Prensa' de alta calidad periodística.
 
@@ -218,6 +273,8 @@ async function processAudio(blob, fileName = "Audio Institucional") {
               1. Debes reconocer primordialmente si quien habla es la Presidenta Claudia Sheinbaum Pardo (o si el audio corresponde a su conferencia de prensa matutina).
               2. Si es ella, el encabezado DEBE ser: "Alerta de conferencia de prensa de la Presidenta Claudia Sheinbaum Pardo".
               3. Si es cualquier otro funcionario o un comunicado general de la institución, usa: "Alerta de prensa de FONATUR".
+
+              ${trainingContext}
 
               DEBES seguir estrictamente este formato:
               
