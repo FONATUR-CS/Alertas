@@ -12,7 +12,7 @@ let audioChunks = [];
 let history = [];
 let currentAlertText = "";
 
-// Variables para "recordar" el archivo si falta la clave
+// Variables para "recordar" el archivo si falta la clave o falla la auth
 let pendingBlob = null;
 let pendingFileName = "";
 
@@ -59,15 +59,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // --- API Key Management ---
 function getApiKey() {
-    return localStorage.getItem('fonatur_gemini_key');
+    return localStorage.getItem('fonatur_gemini_key') || "";
 }
 
 function checkApiKey() {
     const key = getApiKey();
     if (!key) {
-        // No mostramos el modal de inmediato al cargar para no ser invasivos,
-        // solo cuando se intenta una acción o se hace clic en settings.
-        // Pero si el input está vacío, lo limpiamos.
         apiKeyInput.value = "";
     } else {
         apiKeyInput.value = key;
@@ -76,7 +73,7 @@ function checkApiKey() {
 
 function showModal() {
     const key = getApiKey();
-    if (key) apiKeyInput.value = key; // Mostrar la clave actual si existe
+    if (key) apiKeyInput.value = key; 
     apiModal.classList.remove('hidden');
 }
 
@@ -86,18 +83,17 @@ function hideModal() {
 
 btnSaveKey.addEventListener('click', () => {
     const key = apiKeyInput.value.trim();
-    if (key.length > 10) { // Validación básica
+    if (key.length > 10) { 
         localStorage.setItem('fonatur_gemini_key', key);
         hideModal();
         errorBanner.classList.add('hidden');
         
         // REANUDAR OPERACIÓN PENDIENTE
+        // Nota: No limpiamos pendingBlob aquí. Se limpia en processAudio si tiene éxito,
+        // o se mantiene si falla por auth para reintentar.
         if (pendingBlob) {
-            showError("Reanudando procesamiento...", false); // Mensaje temporal
+            showError("Reanudando procesamiento con nueva clave...", false); 
             processAudio(pendingBlob, pendingFileName);
-            // Limpiar pendientes
-            pendingBlob = null;
-            pendingFileName = "";
         } else {
             showError("Clave guardada. Ahora puedes subir tu archivo.", false);
         }
@@ -134,7 +130,6 @@ btnSaveTraining.addEventListener('click', () => {
     setTimeout(() => errorBanner.classList.add('hidden'), 2000);
 });
 
-// Cerrar modal al hacer clic fuera
 trainingModal.addEventListener('click', (e) => {
     if (e.target === trainingModal) {
         trainingModal.classList.add('hidden');
@@ -158,13 +153,12 @@ function saveToHistory(content, audioName) {
         content,
         audioName
     };
-    history = [newAlert, ...history].slice(0, 20); // Keep last 20
+    history = [newAlert, ...history].slice(0, 20); 
     localStorage.setItem('fonatur_alert_history', JSON.stringify(history));
     renderHistory();
 }
 
 function renderHistory() {
-    // Clear list except the empty state div
     Array.from(historyList.children).forEach(child => {
         if (child.id !== 'history-empty') historyList.removeChild(child);
     });
@@ -202,7 +196,6 @@ function setLoading(isLoading) {
         btnRecord.disabled = true;
         fileInput.disabled = true;
         
-        // Actualizar texto de carga
         const loadingText = loadingState.querySelector('h3');
         if (loadingText) loadingText.textContent = "Subiendo y analizando...";
     } else {
@@ -227,13 +220,12 @@ function showError(msg, isError = true) {
     errorBanner.classList.remove('hidden');
     
     if (isError) {
-        setLoading(false); // Reset buttons
+        setLoading(false); 
         loadingState.classList.add('hidden');
-        emptyState.classList.remove('hidden'); // Go back to start
+        emptyState.classList.remove('hidden'); 
     }
     
-    // Auto ocultar solo si no es un error crítico
-    if (!isError || msg.includes('guardada')) {
+    if (!isError || msg.includes('guardada') || msg.includes('Reanudando')) {
         setTimeout(() => {
             errorBanner.classList.add('hidden');
         }, 5000);
@@ -257,6 +249,7 @@ async function processAudio(blob, fileName = "Audio Institucional") {
     
     // Si no hay API Key, guardamos el intento y pedimos la clave
     if (!apiKey) {
+        console.log("Falta API Key, solicitando...");
         pendingBlob = blob;
         pendingFileName = fileName;
         showModal();
@@ -286,6 +279,7 @@ async function processAudio(blob, fileName = "Audio Institucional") {
         reader.onloadend = async () => {
             const base64Data = reader.result.split(',')[1];
 
+            // Instancia de GenAI con la clave
             const ai = new GoogleGenAI({ apiKey: apiKey });
             
             const prompt = `
@@ -321,6 +315,7 @@ async function processAudio(blob, fileName = "Audio Institucional") {
             `;
 
             try {
+                // Usamos streaming
                 const responseStream = await ai.models.generateContentStream({
                     model: 'gemini-3-flash-preview',
                     contents: {
@@ -357,31 +352,46 @@ async function processAudio(blob, fileName = "Audio Institucional") {
                     setLoading(false);
                     loadingState.classList.add('hidden');
                     resultContainer.classList.remove('hidden');
+                    
+                    // ÉXITO: Limpiamos los pendientes
+                    pendingBlob = null;
+                    pendingFileName = "";
                 } else {
                     throw new Error("El modelo no generó texto.");
                 }
 
             } catch (err) {
-                console.error(err);
+                console.error("Error GenAI:", err);
                 
-                // MEJORA EN EL MANEJO DE ERRORES:
-                // No borramos la clave automáticamente, para que el usuario pueda revisarla.
                 let msg = "Error de IA: " + (err.message || "Desconocido");
-                
-                if (err.message && (err.message.includes('403') || err.message.includes('API key') || err.message.includes('permission'))) {
-                    msg = "Error de Autorización (403): Verifica que tu API Key sea correcta y que tengas permisos para usar el modelo Gemini.";
-                    showModal(); // Volvemos a mostrar el modal para que corrijan
+                let isAuthError = false;
+
+                if (err.message && (err.message.includes('403') || err.message.includes('API key') || err.message.includes('permission') || err.message.includes('key not valid'))) {
+                    msg = "Error de Autorización (403): Tu API Key parece incorrecta o no tiene permisos.";
+                    isAuthError = true;
                 } else if (err.message && err.message.includes('429')) {
                     msg = "Límite de cuota excedido (429). Espera unos minutos.";
                 } else if (err.message && err.message.includes('503')) {
-                    msg = "El servicio está saturado temporalmente (503). Intenta de nuevo.";
+                    msg = "Servicio no disponible (503). Intenta de nuevo.";
                 }
 
                 showError(msg);
+
+                if (isAuthError) {
+                    // Si es error de auth, nos aseguramos de que pendingBlob exista para que el usuario pueda reintentar solo guardando la clave
+                    pendingBlob = blob;
+                    pendingFileName = fileName;
+                    showModal();
+                } else {
+                    // Si es otro error, limpiamos pendientes para no reintentar automáticamente algo roto
+                    pendingBlob = null;
+                    pendingFileName = "";
+                }
             }
         };
     } catch (err) {
         showError("Error procesando archivo: " + err.message);
+        pendingBlob = null;
     }
 }
 
