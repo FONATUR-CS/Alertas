@@ -1,0 +1,7 @@
+{
+  "description": "Gestor de alertas periodísticas institucional para FONATUR.",
+  "requestFramePermissions": [
+    "microphone"
+  ],
+  "name": "Gestor Fonatur"
+}

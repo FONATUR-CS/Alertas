@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestor de alertas de Fonatur - Comunicación Social</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .font-news { font-family: 'Playfair+Display', serif; }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #0b231e; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #bd9751; border-radius: 10px; }
+        .hidden { display: none !important; }
+        .fade-in { animation: fadeIn 0.5s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+    <script type="importmap">
+    {
+      "imports": {
+        "@google/genai": "https://esm.sh/@google/genai@^1.34.0"
+      }
+    }
+    </script>
+</head>
+<body class="bg-[#05110e] text-gray-100 min-h-screen overflow-hidden flex">
+
+    <!-- Sidebar -->
+    <aside class="w-80 bg-[#0b231e] border-r border-[#1a3d35] flex flex-col hidden lg:flex">
+        <div class="p-6 border-b border-[#1a3d35] flex justify-between items-center">
+            <div class="flex items-center gap-2 text-[#bd9751]">
+                <i data-lucide="history" class="w-5 h-5"></i>
+                <h2 class="font-semibold uppercase tracking-wider text-xs">Historial Institucional</h2>
+            </div>
+            <button id="btn-clear-history" class="text-gray-500 hover:text-[#bd9751] transition-colors hidden">
+                <i data-lucide="trash-2" class="w-4 h-4"></i>
+            </button>
+        </div>
+        <div id="history-list" class="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-3">
+            <!-- History items will be injected here -->
+            <div id="history-empty" class="text-center py-10 text-gray-600">
+                <i data-lucide="shield-check" class="w-10 h-10 mx-auto mb-2 opacity-10"></i>
+                <p class="text-sm">Sin alertas previas</p>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="flex-1 flex flex-col bg-[#05110e] overflow-hidden relative">
+        
+        <!-- Header -->
+        <header class="h-24 flex items-center justify-between px-8 border-b border-[#1a3d35] bg-[#0b231e]/90 backdrop-blur-md sticky top-0 z-10">
+            <div class="flex items-center gap-4">
+                <div class="w-12 h-12 bg-[#bd9751] rounded flex items-center justify-center shadow-lg shadow-black/40">
+                    <i data-lucide="shield-check" class="text-[#0b231e] w-7 h-7"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold tracking-tight text-white uppercase">
+                        Gestor de alertas de <span class="text-[#bd9751]">Fonatur</span>
+                    </h1>
+                    <p class="text-[10px] text-[#bd9751] font-bold uppercase tracking-[0.3em]">Comunicación Social</p>
+                </div>
+            </div>
+            
+            <div class="flex items-center gap-4">
+                <!-- Record Button -->
+                <button id="btn-record" class="flex items-center gap-2 bg-white text-[#0b231e] hover:bg-[#bd9751] hover:text-white px-6 py-2.5 rounded font-bold transition-all active:scale-95 disabled:opacity-50">
+                    <i data-lucide="mic" class="w-4 h-4"></i>
+                    <span class="text-sm uppercase tracking-wide">Iniciar Grabación</span>
+                </button>
+
+                <!-- Stop Button (Hidden by default) -->
+                <button id="btn-stop" class="hidden flex items-center gap-2 bg-[#bd9751] text-[#0b231e] hover:bg-[#a68444] px-5 py-2.5 rounded font-bold animate-pulse shadow-lg">
+                    <i data-lucide="square" class="w-4 h-4" fill="currentColor"></i>
+                    <span class="text-sm">DETENER</span>
+                </button>
+                
+                <!-- Upload Button -->
+                <label class="cursor-pointer bg-[#13322b] hover:bg-[#1a3d35] p-2.5 rounded border border-[#bd9751]/30 text-[#bd9751] transition-colors">
+                    <i data-lucide="upload" class="w-5 h-5"></i>
+                    <input type="file" id="file-input" class="hidden" accept="audio/*">
+                </label>
+            </div>
+        </header>
+
+        <!-- Error Banner -->
+        <div id="error-banner" class="hidden absolute top-28 left-1/2 transform -translate-x-1/2 w-full max-w-2xl bg-red-950/90 border border-red-900/50 p-4 rounded z-20 flex items-center gap-3 text-red-400">
+            <i data-lucide="alert-circle" class="w-5 h-5"></i>
+            <p id="error-message" class="text-sm font-medium"></p>
+        </div>
+
+        <!-- Workspace -->
+        <div class="flex-1 p-8 overflow-y-auto custom-scrollbar flex flex-col items-center justify-start">
+            
+            <!-- Empty State -->
+            <div id="empty-state" class="flex flex-col items-center justify-center py-40 text-center">
+                <div class="w-24 h-24 bg-[#0b231e] border border-[#bd9751]/20 rounded-full flex items-center justify-center mb-10 shadow-2xl">
+                    <i data-lucide="newspaper" class="w-12 h-12 text-[#bd9751] opacity-60"></i>
+                </div>
+                <h2 class="text-2xl font-news text-gray-200 mb-4 tracking-wide italic">Buzón Institucional</h2>
+                <p class="text-gray-500 max-w-md text-sm">
+                    Inicie la captura de audio o cargue un reporte oficial para procesar la alerta periodística de Fonatur.
+                </p>
+            </div>
+
+            <!-- Loading State -->
+            <div id="loading-state" class="hidden flex flex-col items-center justify-center py-24 space-y-6">
+                <div class="relative">
+                    <div class="w-24 h-24 border-4 border-[#bd9751]/20 border-t-[#bd9751] rounded-full animate-spin"></div>
+                    <div class="absolute inset-0 flex items-center justify-center">
+                        <i data-lucide="loader-2" class="w-8 h-8 animate-pulse text-[#bd9751]"></i>
+                    </div>
+                </div>
+                <div class="text-center">
+                    <h3 class="text-xl font-bold mb-2 text-white">Generando Síntesis...</h3>
+                    <p class="text-gray-500 text-sm max-w-xs mx-auto">
+                        El sistema está procesando el audio oficial para la redacción de Comunicación Social.
+                    </p>
+                </div>
+            </div>
+
+            <!-- Result State -->
+            <div id="result-container" class="hidden w-full max-w-4xl bg-white text-[#0b231e] shadow-2xl rounded overflow-hidden flex flex-col min-h-[600px] mb-20 fade-in">
+                <!-- Document Header -->
+                <div class="bg-[#f8f9fa] px-8 py-5 border-b border-gray-200 flex justify-between items-center">
+                    <div class="flex items-center gap-2">
+                       <div class="w-2 h-6 bg-[#bd9751]"></div>
+                       <span class="text-[10px] font-bold uppercase tracking-widest text-[#0b231e]">FONATUR • Comunicación Social</span>
+                    </div>
+                    <button id="btn-copy" class="flex items-center gap-1.5 text-xs bg-[#0b231e] text-white hover:bg-[#13322b] px-4 py-2 rounded font-bold shadow-md transition-all active:scale-95">
+                        <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+                        <span id="btn-copy-text">COPIAR TEXTO</span>
+                    </button>
+                </div>
+
+                <!-- News Body -->
+                <div class="p-12 md:p-16 flex-1 font-serif text-lg leading-relaxed whitespace-pre-wrap selection:bg-[#bd9751]/20">
+                    <div id="alert-content" class="max-w-2xl mx-auto font-news"></div>
+                </div>
+
+                <!-- Footer Institutional -->
+                <div class="px-12 py-8 border-t border-gray-100 bg-[#f8f9fa] flex justify-between items-center">
+                     <div class="text-[9px] font-bold uppercase tracking-widest text-gray-400">
+                       Gobierno de México | Fonatur
+                     </div>
+                     <div class="w-32 h-8 bg-gray-200 opacity-30 rounded-sm"></div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script type="module" src="index.js"></script>
+</body>
+</html>
