@@ -97,10 +97,17 @@ function setLoading(isLoading) {
         loadingState.classList.remove('hidden');
         btnRecord.disabled = true;
         fileInput.disabled = true;
+        
+        // Actualizar texto de carga
+        const loadingText = loadingState.querySelector('h3');
+        if (loadingText) loadingText.textContent = "Subiendo y analizando...";
     } else {
-        loadingState.classList.add('hidden');
+        // Nota: No ocultamos loadingState aquí directamente si estamos en streaming, 
+        // lo hacemos cuando llega el primer chunk.
         btnRecord.disabled = false;
         fileInput.disabled = false;
+        const loadingText = loadingState.querySelector('h3');
+        if (loadingText) loadingText.textContent = "Generando Síntesis...";
     }
 }
 
@@ -116,6 +123,10 @@ function showResult(text) {
 function showError(msg) {
     errorMessage.textContent = msg;
     errorBanner.classList.remove('hidden');
+    setLoading(false); // Reset buttons
+    loadingState.classList.add('hidden');
+    emptyState.classList.remove('hidden'); // Go back to start
+    
     setTimeout(() => {
         errorBanner.classList.add('hidden');
     }, 5000);
@@ -145,7 +156,8 @@ async function processAudio(blob, fileName = "Audio Institucional") {
             
             // Validar API Key antes de llamar
             if (!API_KEY || API_KEY === 'TU_API_KEY_AQUI') {
-                throw new Error("API Key no configurada. Edita index.js para añadirla.");
+                showError("API Key no configurada. Edita index.js.");
+                return;
             }
 
             const ai = new GoogleGenAI({ apiKey: API_KEY });
@@ -180,7 +192,8 @@ async function processAudio(blob, fileName = "Audio Institucional") {
             `;
 
             try {
-                const response = await ai.models.generateContent({
+                // USAR STREAMING PARA MEJOR VELOCIDAD PERCIBIDA
+                const responseStream = await ai.models.generateContentStream({
                     model: 'gemini-3-flash-preview',
                     contents: {
                         parts: [
@@ -190,24 +203,47 @@ async function processAudio(blob, fileName = "Audio Institucional") {
                     }
                 });
 
-                const text = response.text;
-                if (text) {
-                    showResult(text);
-                    saveToHistory(text, fileName);
-                } else {
-                    throw new Error("El modelo no devolvió texto.");
+                let fullText = "";
+                let isFirstChunk = true;
+
+                for await (const chunk of responseStream) {
+                    const chunkText = chunk.text;
+                    if (chunkText) {
+                        fullText += chunkText;
+
+                        if (isFirstChunk) {
+                            // Al recibir el primer byte, ocultar loading y mostrar el papel
+                            loadingState.classList.add('hidden');
+                            resultContainer.classList.remove('hidden');
+                            emptyState.classList.add('hidden');
+                            window.scrollTo({ top: 0, behavior: 'smooth' });
+                            isFirstChunk = false;
+                        }
+                        
+                        // Actualizar texto en tiempo real
+                        alertContent.innerText = fullText;
+                    }
                 }
+
+                if (fullText) {
+                    currentAlertText = fullText;
+                    saveToHistory(fullText, fileName);
+                    // Habilitar botones de nuevo
+                    setLoading(false); // Esto resetea botones y textos
+                    // Asegurarnos que la vista correcta se mantiene
+                    loadingState.classList.add('hidden');
+                    resultContainer.classList.remove('hidden');
+                } else {
+                    throw new Error("El modelo no generó texto.");
+                }
+
             } catch (err) {
                 console.error(err);
-                showError("Error de IA: " + (err.message || "Desconocido"));
-                setLoading(false);
-                emptyState.classList.remove('hidden');
+                showError("Error de IA: " + (err.message || "No se pudo conectar"));
             }
         };
     } catch (err) {
-        showError("Error: " + err.message);
-        setLoading(false);
-        emptyState.classList.remove('hidden');
+        showError("Error procesando archivo: " + err.message);
     }
 }
 
@@ -223,6 +259,7 @@ btnRecord.addEventListener('click', async () => {
         };
 
         mediaRecorder.onstop = () => {
+            // Usar webm para mayor compatibilidad
             const blob = new Blob(audioChunks, { type: 'audio/webm' });
             processAudio(blob, "Grabación Fonatur");
             stream.getTracks().forEach(track => track.stop());
@@ -232,7 +269,7 @@ btnRecord.addEventListener('click', async () => {
         btnRecord.classList.add('hidden');
         btnStop.classList.remove('hidden');
     } catch (err) {
-        showError("No se pudo acceder al micrófono.");
+        showError("No se pudo acceder al micrófono. Verifique permisos.");
     }
 });
 
