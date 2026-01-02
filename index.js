@@ -83,19 +83,18 @@ function hideModal() {
 
 btnSaveKey.addEventListener('click', () => {
     const key = apiKeyInput.value.trim();
-    if (key.length > 10) { 
+    if (key.length > 5) { // Validación mínima
         localStorage.setItem('fonatur_gemini_key', key);
         hideModal();
         errorBanner.classList.add('hidden');
         
         // REANUDAR OPERACIÓN PENDIENTE
-        // Nota: No limpiamos pendingBlob aquí. Se limpia en processAudio si tiene éxito,
-        // o se mantiene si falla por auth para reintentar.
+        // Si había un archivo esperando, lo procesamos ahora que tenemos clave nueva
         if (pendingBlob) {
-            showError("Reanudando procesamiento con nueva clave...", false); 
+            showError("Clave actualizada. Reintentando procesar archivo...", false); 
             processAudio(pendingBlob, pendingFileName);
         } else {
-            showError("Clave guardada. Ahora puedes subir tu archivo.", false);
+            showError("Clave guardada correctamente.", false);
         }
     } else {
         alert("Por favor, ingresa una API Key válida.");
@@ -225,11 +224,13 @@ function showError(msg, isError = true) {
         emptyState.classList.remove('hidden'); 
     }
     
-    if (!isError || msg.includes('guardada') || msg.includes('Reanudando')) {
+    // Si es un mensaje de éxito, se oculta solo
+    if (!isError) {
         setTimeout(() => {
             errorBanner.classList.add('hidden');
         }, 5000);
     }
+    // Si es un error, dejamos que el usuario lo lea y cierre o que se cierre al hacer otra acción
 }
 
 // --- Audio & AI Logic ---
@@ -279,7 +280,6 @@ async function processAudio(blob, fileName = "Audio Institucional") {
         reader.onloadend = async () => {
             const base64Data = reader.result.split(',')[1];
 
-            // Instancia de GenAI con la clave
             const ai = new GoogleGenAI({ apiKey: apiKey });
             
             const prompt = `
@@ -366,8 +366,9 @@ async function processAudio(blob, fileName = "Audio Institucional") {
                 let msg = "Error de IA: " + (err.message || "Desconocido");
                 let isAuthError = false;
 
-                if (err.message && (err.message.includes('403') || err.message.includes('API key') || err.message.includes('permission') || err.message.includes('key not valid'))) {
-                    msg = "Error de Autorización (403): Tu API Key parece incorrecta o no tiene permisos.";
+                // Detección mejorada de errores de Auth
+                if (err.message && (err.message.includes('403') || err.message.includes('API key') || err.message.includes('permission') || err.message.includes('key not valid') || err.message.includes('400'))) {
+                    msg = "Error de Autenticación: Google rechazó la API Key. Verifica que la clave sea correcta y tenga permisos para 'Gemini 1.5 Flash'.";
                     isAuthError = true;
                 } else if (err.message && err.message.includes('429')) {
                     msg = "Límite de cuota excedido (429). Espera unos minutos.";
@@ -378,12 +379,13 @@ async function processAudio(blob, fileName = "Audio Institucional") {
                 showError(msg);
 
                 if (isAuthError) {
-                    // Si es error de auth, nos aseguramos de que pendingBlob exista para que el usuario pueda reintentar solo guardando la clave
+                    // Mantenemos el archivo en memoria para reintentar
                     pendingBlob = blob;
                     pendingFileName = fileName;
-                    showModal();
+                    // IMPORTANTE: NO abrimos el modal automáticamente para evitar el bucle.
+                    // El usuario debe abrirlo manualmente si quiere corregirlo.
                 } else {
-                    // Si es otro error, limpiamos pendientes para no reintentar automáticamente algo roto
+                    // Si es otro error, limpiamos
                     pendingBlob = null;
                     pendingFileName = "";
                 }
