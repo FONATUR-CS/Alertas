@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -18,6 +19,23 @@
         .hidden { display: none !important; }
         .fade-in { animation: fadeIn 0.5s ease-in-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        
+        /* Custom Progress Bar */
+        .progress-container {
+            width: 100%;
+            height: 6px;
+            background: rgba(189, 151, 81, 0.1);
+            border-radius: 10px;
+            overflow: hidden;
+            margin-top: 1rem;
+        }
+        .progress-bar {
+            height: 100%;
+            background: #bd9751;
+            width: 0%;
+            transition: width 0.3s ease;
+            box-shadow: 0 0 10px rgba(189, 151, 81, 0.5);
+        }
     </style>
     <script type="importmap">
     {
@@ -41,7 +59,6 @@
             </button>
         </div>
         <div id="history-list" class="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-3">
-            <!-- History items will be injected here -->
             <div id="history-empty" class="text-center py-10 text-gray-600">
                 <i data-lucide="shield-check" class="w-10 h-10 mx-auto mb-2 opacity-10"></i>
                 <p class="text-sm">Sin alertas previas</p>
@@ -67,32 +84,23 @@
             </div>
             
             <div class="flex items-center gap-4">
-                <!-- Training / Examples Button -->
                 <button id="btn-training" class="p-2 text-gray-400 hover:text-[#bd9751] transition-colors" title="Entrenamiento y Estilo">
                     <i data-lucide="book-open-check" class="w-5 h-5"></i>
                 </button>
-
-                <!-- API Key Settings Button -->
                 <button id="btn-settings" class="p-2 text-gray-400 hover:text-[#bd9751] transition-colors" title="Configurar API Key">
                     <i data-lucide="key" class="w-5 h-5"></i>
                 </button>
-
-                <!-- Record Button -->
                 <button id="btn-record" class="flex items-center gap-2 bg-white text-[#0b231e] hover:bg-[#bd9751] hover:text-white px-6 py-2.5 rounded font-bold transition-all active:scale-95 disabled:opacity-50">
                     <i data-lucide="mic" class="w-4 h-4"></i>
                     <span class="text-sm uppercase tracking-wide">Iniciar Grabación</span>
                 </button>
-
-                <!-- Stop Button (Hidden by default) -->
                 <button id="btn-stop" class="hidden flex items-center gap-2 bg-[#bd9751] text-[#0b231e] hover:bg-[#a68444] px-5 py-2.5 rounded font-bold animate-pulse shadow-lg">
                     <i data-lucide="square" class="w-4 h-4" fill="currentColor"></i>
                     <span class="text-sm">DETENER</span>
                 </button>
-                
-                <!-- Upload Button -->
                 <label class="cursor-pointer bg-[#13322b] hover:bg-[#1a3d35] p-2.5 rounded border border-[#bd9751]/30 text-[#bd9751] transition-colors">
                     <i data-lucide="upload" class="w-5 h-5"></i>
-                    <input type="file" id="file-input" class="hidden" accept="audio/*">
+                    <input type="file" id="file-input" class="hidden" accept="audio/*,video/*">
                 </label>
             </div>
         </header>
@@ -117,26 +125,31 @@
                 </p>
             </div>
 
-            <!-- Loading State -->
-            <div id="loading-state" class="hidden flex flex-col items-center justify-center py-24 space-y-6">
-                <div class="relative">
+            <!-- Loading State with Progress Bar -->
+            <div id="loading-state" class="hidden flex flex-col items-center justify-center py-24 w-full max-w-sm">
+                <div class="relative mb-8">
                     <div class="w-24 h-24 border-4 border-[#bd9751]/20 border-t-[#bd9751] rounded-full animate-spin"></div>
                     <div class="absolute inset-0 flex items-center justify-center">
                         <i data-lucide="loader-2" class="w-8 h-8 animate-pulse text-[#bd9751]"></i>
                     </div>
                 </div>
-                <div class="text-center">
-                    <h3 class="text-xl font-bold mb-2 text-white">Generando Síntesis...</h3>
-                    <p class="text-gray-500 text-sm max-w-xs mx-auto">
-                        El sistema está procesando el audio oficial para la redacción de Comunicación Social.
-                    </p>
+                <div class="text-center w-full">
+                    <h3 class="text-xl font-bold mb-2 text-white">Procesando audio oficial</h3>
+                    <p class="text-gray-500 text-xs uppercase tracking-widest mb-4">Analizando transcripción y estilo...</p>
+                    
+                    <div class="progress-container">
+                        <div id="progress-bar" class="progress-bar"></div>
+                    </div>
+                    <div class="flex justify-between mt-2">
+                        <span id="progress-percentage" class="text-[10px] text-[#bd9751] font-bold">0%</span>
+                        <span id="progress-status" class="text-[10px] text-gray-500 uppercase tracking-tighter">Preparando archivo</span>
+                    </div>
                 </div>
             </div>
 
             <!-- Result State -->
             <div id="result-container" class="hidden w-full max-w-4xl bg-white text-[#0b231e] shadow-2xl rounded overflow-hidden flex flex-col min-h-[600px] mb-20 fade-in">
-                <!-- Document Header -->
-                <div class="bg-[#f8f9fa] px-8 py-5 border-b border-gray-200 flex justify-between items-center">
+                <div class="bg-[#f8f9fa] px-8 py-5 border-b border-gray-200 flex justify-between items-center sticky top-0 z-10">
                     <div class="flex items-center gap-2">
                        <div class="w-2 h-6 bg-[#bd9751]"></div>
                        <span class="text-[10px] font-bold uppercase tracking-widest text-[#0b231e]">FONATUR • Comunicación Social</span>
@@ -147,12 +160,10 @@
                     </button>
                 </div>
 
-                <!-- News Body -->
-                <div class="p-12 md:p-16 flex-1 font-serif text-lg leading-relaxed whitespace-pre-wrap selection:bg-[#bd9751]/20">
+                <div class="p-12 md:p-16 flex-1 font-serif text-lg leading-relaxed whitespace-pre-wrap selection:bg-[#bd9751]/20 overflow-y-auto">
                     <div id="alert-content" class="max-w-2xl mx-auto font-news"></div>
                 </div>
 
-                <!-- Footer Institutional -->
                 <div class="px-12 py-8 border-t border-gray-100 bg-[#f8f9fa] flex justify-between items-center">
                      <div class="text-[9px] font-bold uppercase tracking-widest text-gray-400">
                        Gobierno de México | Fonatur
@@ -163,60 +174,33 @@
         </div>
     </main>
 
-    <!-- API Key Modal -->
+    <!-- Modals (API & Training) -->
     <div id="api-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
         <div class="bg-[#0b231e] border border-[#1a3d35] rounded-lg shadow-2xl w-full max-w-md p-6">
             <div class="flex items-center gap-3 mb-4 text-[#bd9751]">
                 <i data-lucide="lock" class="w-6 h-6"></i>
                 <h3 class="text-lg font-bold uppercase tracking-wider">Credenciales de Acceso</h3>
             </div>
-            <p class="text-gray-400 text-sm mb-4">
-                Para usar el gestor, ingrese su <span class="text-white font-semibold">Gemini API Key</span>. Esta clave se guardará únicamente en su navegador.
-            </p>
+            <p class="text-gray-400 text-sm mb-4">Ingrese su <span class="text-white font-semibold">Gemini API Key</span>.</p>
             <div class="mb-6">
-                <label class="block text-xs font-bold text-gray-500 uppercase mb-2">API Key</label>
-                <input type="password" id="api-key-input" placeholder="AIza..." class="w-full bg-[#05110e] border border-[#1a3d35] text-white p-3 rounded focus:outline-none focus:border-[#bd9751] transition-colors">
-                <a href="https://aistudio.google.com/app/apikey" target="_blank" class="text-xs text-[#bd9751] hover:underline mt-2 inline-block">¿No tienes una clave? Consíguela aquí gratis.</a>
+                <input type="password" id="api-key-input" placeholder="AIza..." class="w-full bg-[#05110e] border border-[#1a3d35] text-white p-3 rounded focus:outline-none focus:border-[#bd9751]">
+                <a href="https://aistudio.google.com/app/apikey" target="_blank" class="text-xs text-[#bd9751] hover:underline mt-2 inline-block">¿No tienes una clave? Consíguela aquí.</a>
             </div>
-            <div class="flex justify-end gap-2">
-                <button id="btn-save-key" class="bg-[#bd9751] text-[#0b231e] px-4 py-2 rounded font-bold hover:bg-[#a68444] transition-colors w-full">
-                    GUARDAR CREDENCIAL
-                </button>
-            </div>
+            <button id="btn-save-key" class="bg-[#bd9751] text-[#0b231e] px-4 py-2 rounded font-bold hover:bg-[#a68444] w-full">GUARDAR</button>
         </div>
     </div>
 
-    <!-- Training/Style Modal -->
     <div id="training-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
         <div class="bg-[#0b231e] border border-[#1a3d35] rounded-lg shadow-2xl w-full max-w-2xl p-6 flex flex-col max-h-[90vh]">
             <div class="flex items-center justify-between mb-4">
                 <div class="flex items-center gap-3 text-[#bd9751]">
                     <i data-lucide="book-open-check" class="w-6 h-6"></i>
-                    <h3 class="text-lg font-bold uppercase tracking-wider">Entrenamiento de Estilo</h3>
+                    <h3 class="text-lg font-bold uppercase tracking-wider">Estilo Institucional</h3>
                 </div>
-                <button id="btn-close-training" class="text-gray-500 hover:text-white">
-                    <i data-lucide="x" class="w-5 h-5"></i>
-                </button>
+                <button id="btn-close-training" class="text-gray-500 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
             </div>
-            
-            <p class="text-gray-400 text-sm mb-4">
-                Pegue aquí ejemplos de alertas o boletines anteriores aprobados. La IA usará esto como referencia para imitar el tono, vocabulario y estructura.
-            </p>
-            
-            <div class="flex-1 mb-4 flex flex-col">
-                <label class="block text-xs font-bold text-gray-500 uppercase mb-2">Ejemplos de Redacción (Few-Shot)</label>
-                <textarea id="training-input" class="flex-1 w-full bg-[#05110e] border border-[#1a3d35] text-white p-4 rounded focus:outline-none focus:border-[#bd9751] transition-colors font-mono text-sm leading-relaxed resize-none h-64" placeholder="Ejemplo 1:
-FONATUR INFORMA... [Texto del ejemplo]
-
-Ejemplo 2:
-ALERTA DE PRENSA... [Texto del ejemplo]"></textarea>
-            </div>
-            
-            <div class="flex justify-end gap-2">
-                <button id="btn-save-training" class="bg-[#bd9751] text-[#0b231e] px-6 py-2.5 rounded font-bold hover:bg-[#a68444] transition-colors">
-                    GUARDAR EJEMPLOS
-                </button>
-            </div>
+            <textarea id="training-input" class="flex-1 w-full bg-[#05110e] border border-[#1a3d35] text-white p-4 rounded font-mono text-sm resize-none h-64" placeholder="Pega aquí ejemplos de alertas anteriores..."></textarea>
+            <button id="btn-save-training" class="mt-4 bg-[#bd9751] text-[#0b231e] px-6 py-2.5 rounded font-bold hover:bg-[#a68444]">GUARDAR REFERENCIAS</button>
         </div>
     </div>
 
