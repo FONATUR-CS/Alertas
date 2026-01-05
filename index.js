@@ -250,7 +250,10 @@ function showResult(text) {
     emptyState.classList.add('hidden');
     loadingState.classList.add('hidden');
     resultContainer.classList.remove('hidden');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    
+    // Desplazar el área de trabajo al inicio del resultado
+    const workspace = document.querySelector('.flex-1.overflow-y-auto');
+    if (workspace) workspace.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 function showError(msg, isError = true) {
@@ -280,6 +283,7 @@ function getCurrentDateFormatted() {
     const date = new Date();
     const options = { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' };
     let formatted = date.toLocaleDateString('es-MX', options);
+    // Eliminar la coma tras el día de la semana
     formatted = formatted.replace(',', '');
     return formatted.charAt(0).toUpperCase() + formatted.slice(1);
 }
@@ -322,31 +326,32 @@ async function processAudio(blob, fileName = "Audio Institucional") {
             const prompt = `
               Actúa como un redactor senior de Comunicación Social de FONATUR. Tu tarea es escuchar el audio y generar una 'Alerta de Prensa' fidedigna.
 
-              REGLAS DE ORO:
-              1. **LEALTAD AL AUDIO**: NO agregues información, datos, cifras o contexto que no aparezcan explícitamente en el audio. Si el audio no lo dice, la alerta no lo pone.
-              2. **IDENTIFICACIÓN DE VOZ**: Debes identificar con precisión si quien habla es la Presidenta Claudia Sheinbaum Pardo. También identifica a otros funcionarios públicos si son mencionados o reconocibles por su cargo.
-              3. **ENCABEZADO**: Debe reflejar al orador. Ejemplo: "Alerta de conferencia de prensa de la Presidenta Claudia Sheinbaum Pardo" o "Alerta de prensa de FONATUR".
+              REGLAS DE ORO (VERACIDAD):
+              1. **LEALTAD AL AUDIO**: NO agregues información, datos o contexto que no aparezcan en el audio. Si el audio no lo menciona, tú no lo escribes.
+              2. **IDENTIFICACIÓN DE VOZ**: Identifica con precisión a la Presidenta Claudia Sheinbaum Pardo y a otros funcionarios si son reconocibles.
+              3. **ESTILO**: Formal, institucional y periodístico.
 
               REGLAS DE FORMATO CRÍTICAS:
-              1. USA EXACTAMENTE UN ASTERISCO (*) al inicio y al final del Título y del Subtítulo. Ejemplo: *Título de la noticia*
-              2. LA FECHA DEBE SER: ${systemDate}. NO pongas comas antes del número del día.
-              
+              1. **ENCABEZADO**: El encabezado (Ej: *Alerta de prensa de FONATUR*) debe llevar exactamente un asterisco (*) al inicio y uno al final. 
+              2. **FECHA**: La fecha (Ej: ${systemDate}) NO debe llevar asteriscos ni ningún otro formato. Debe aparecer en texto plano.
+              3. **TITULAR**: El titular debe llevar un asterisco (*) al inicio y uno al final (Ej: *México impulsa el desarrollo ferroviario*).
+              4. **CUERPO DE LA ALERTA**: Los párrafos de desarrollo NO deben contener ningún asterisco, ni negritas, ni cursivas. Debe ser texto plano sin formato Markdown.
+
               ${trainingContext}
 
               ESTRUCTURA OBLIGATORIA:
               ---
-              [ENCABEZADO INSTITUCIONAL SEGÚN EL ORADOR]
+              *[ENCABEZADO INSTITUCIONAL SEGÚN EL ORADOR]*
               ${systemDate}
 
-              *TITULAR RESUMEN*
-              [Párrafo de inicio que identifique claramente quién habla y el tema central del audio].
+              *[TITULAR RESUMEN]*
 
-              [Cuerpo con los puntos clave, detalles técnicos y dependencias que se mencionen EXCLUSIVAMENTE en el audio].
+              [Cuerpo de la alerta: Texto plano sin asteriscos, organizado en párrafos claros, fiel al audio].
 
-              [Cierre institucional basado en el audio].
+              [Cierre institucional basado en el audio, sin asteriscos].
               ---
 
-              Instrucciones Finales: Entrega solo el texto resultante en español, con tono formal, periodístico e institucional. No inventes nada.
+              Instrucciones Finales: Entrega solo el texto resultante en español. No inventes nada.
             `;
 
             try {
