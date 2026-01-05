@@ -45,10 +45,10 @@
     }
     </script>
 </head>
-<body class="bg-[#05110e] text-gray-100 min-h-screen overflow-hidden flex">
+<body class="bg-[#05110e] text-gray-100 min-h-screen flex overflow-hidden">
 
     <!-- Sidebar -->
-    <aside class="w-80 bg-[#0b231e] border-r border-[#1a3d35] flex flex-col hidden lg:flex">
+    <aside class="w-80 bg-[#0b231e] border-r border-[#1a3d35] flex flex-col hidden lg:flex shrink-0">
         <div class="p-6 border-b border-[#1a3d35] flex justify-between items-center">
             <div class="flex items-center gap-2 text-[#bd9751]">
                 <i data-lucide="history" class="w-5 h-5"></i>
@@ -67,10 +67,10 @@
     </aside>
 
     <!-- Main Content -->
-    <main class="flex-1 flex flex-col bg-[#05110e] overflow-hidden relative">
+    <main class="flex-1 flex flex-col bg-[#05110e] min-w-0 h-screen">
         
         <!-- Header -->
-        <header class="h-24 flex items-center justify-between px-8 border-b border-[#1a3d35] bg-[#0b231e]/90 backdrop-blur-md sticky top-0 z-10">
+        <header class="h-24 shrink-0 flex items-center justify-between px-8 border-b border-[#1a3d35] bg-[#0b231e]/90 backdrop-blur-md z-10">
             <div class="flex items-center gap-4">
                 <div class="w-12 h-12 bg-[#bd9751] rounded flex items-center justify-center shadow-lg shadow-black/40">
                     <i data-lucide="shield-check" class="text-[#0b231e] w-7 h-7"></i>
@@ -105,76 +105,78 @@
             </div>
         </header>
 
-        <!-- Error Banner -->
-        <div id="error-banner" class="hidden absolute top-28 left-1/2 transform -translate-x-1/2 w-full max-w-2xl bg-red-950/90 border border-red-900/50 p-4 rounded z-20 flex items-center gap-3 text-red-400">
-            <i data-lucide="alert-circle" class="w-5 h-5"></i>
-            <p id="error-message" class="text-sm font-medium"></p>
-        </div>
-
-        <!-- Workspace -->
-        <div class="flex-1 p-8 overflow-y-auto custom-scrollbar flex flex-col items-center justify-start">
-            
-            <!-- Empty State -->
-            <div id="empty-state" class="flex flex-col items-center justify-center py-40 text-center">
-                <div class="w-24 h-24 bg-[#0b231e] border border-[#bd9751]/20 rounded-full flex items-center justify-center mb-10 shadow-2xl">
-                    <i data-lucide="newspaper" class="w-12 h-12 text-[#bd9751] opacity-60"></i>
+        <!-- Workspace (This is the scrollable area) -->
+        <div class="flex-1 overflow-y-auto custom-scrollbar bg-[#05110e]">
+            <div class="p-8 flex flex-col items-center min-h-full">
+                
+                <!-- Error Banner -->
+                <div id="error-banner" class="hidden w-full max-w-2xl bg-red-950/90 border border-red-900/50 p-4 rounded mb-6 flex items-center gap-3 text-red-400">
+                    <i data-lucide="alert-circle" class="w-5 h-5"></i>
+                    <p id="error-message" class="text-sm font-medium"></p>
                 </div>
-                <h2 class="text-2xl font-news text-gray-200 mb-4 tracking-wide italic">Buzón Institucional</h2>
-                <p class="text-gray-500 max-w-md text-sm">
-                    Inicie la captura de audio o cargue un reporte oficial para procesar la alerta periodística de Fonatur.
-                </p>
-            </div>
 
-            <!-- Loading State with Progress Bar -->
-            <div id="loading-state" class="hidden flex flex-col items-center justify-center py-24 w-full max-w-sm">
-                <div class="relative mb-8">
-                    <div class="w-24 h-24 border-4 border-[#bd9751]/20 border-t-[#bd9751] rounded-full animate-spin"></div>
-                    <div class="absolute inset-0 flex items-center justify-center">
-                        <i data-lucide="loader-2" class="w-8 h-8 animate-pulse text-[#bd9751]"></i>
+                <!-- Empty State -->
+                <div id="empty-state" class="flex flex-col items-center justify-center py-40 text-center">
+                    <div class="w-24 h-24 bg-[#0b231e] border border-[#bd9751]/20 rounded-full flex items-center justify-center mb-10 shadow-2xl">
+                        <i data-lucide="newspaper" class="w-12 h-12 text-[#bd9751] opacity-60"></i>
+                    </div>
+                    <h2 class="text-2xl font-news text-gray-200 mb-4 tracking-wide italic">Buzón Institucional</h2>
+                    <p class="text-gray-500 max-w-md text-sm">
+                        Inicie la captura de audio o cargue un reporte oficial para procesar la alerta periodística de Fonatur.
+                    </p>
+                </div>
+
+                <!-- Loading State with Progress Bar -->
+                <div id="loading-state" class="hidden flex flex-col items-center justify-center py-24 w-full max-w-sm">
+                    <div class="relative mb-8">
+                        <div class="w-24 h-24 border-4 border-[#bd9751]/20 border-t-[#bd9751] rounded-full animate-spin"></div>
+                        <div class="absolute inset-0 flex items-center justify-center">
+                            <i data-lucide="loader-2" class="w-8 h-8 animate-pulse text-[#bd9751]"></i>
+                        </div>
+                    </div>
+                    <div class="text-center w-full">
+                        <h3 class="text-xl font-bold mb-2 text-white">Procesando audio oficial</h3>
+                        <p class="text-gray-500 text-xs uppercase tracking-widest mb-4">Analizando transcripción y estilo...</p>
+                        
+                        <div class="progress-container">
+                            <div id="progress-bar" class="progress-bar"></div>
+                        </div>
+                        <div class="flex justify-between mt-2">
+                            <span id="progress-percentage" class="text-[10px] text-[#bd9751] font-bold">0%</span>
+                            <span id="progress-status" class="text-[10px] text-gray-500 uppercase tracking-tighter">Preparando archivo</span>
+                        </div>
                     </div>
                 </div>
-                <div class="text-center w-full">
-                    <h3 class="text-xl font-bold mb-2 text-white">Procesando audio oficial</h3>
-                    <p class="text-gray-500 text-xs uppercase tracking-widest mb-4">Analizando transcripción y estilo...</p>
-                    
-                    <div class="progress-container">
-                        <div id="progress-bar" class="progress-bar"></div>
-                    </div>
-                    <div class="flex justify-between mt-2">
-                        <span id="progress-percentage" class="text-[10px] text-[#bd9751] font-bold">0%</span>
-                        <span id="progress-status" class="text-[10px] text-gray-500 uppercase tracking-tighter">Preparando archivo</span>
-                    </div>
-                </div>
-            </div>
 
-            <!-- Result State -->
-            <div id="result-container" class="hidden w-full max-w-4xl bg-white text-[#0b231e] shadow-2xl rounded overflow-hidden flex flex-col min-h-[600px] mb-20 fade-in">
-                <div class="bg-[#f8f9fa] px-8 py-5 border-b border-gray-200 flex justify-between items-center sticky top-0 z-10">
-                    <div class="flex items-center gap-2">
-                       <div class="w-2 h-6 bg-[#bd9751]"></div>
-                       <span class="text-[10px] font-bold uppercase tracking-widest text-[#0b231e]">FONATUR • Comunicación Social</span>
+                <!-- Result State -->
+                <div id="result-container" class="hidden w-full max-w-4xl bg-white text-[#0b231e] shadow-2xl rounded overflow-hidden flex flex-col mb-20 fade-in">
+                    <div class="bg-[#f8f9fa] px-8 py-5 border-b border-gray-200 flex justify-between items-center sticky top-0 z-10">
+                        <div class="flex items-center gap-2">
+                           <div class="w-2 h-6 bg-[#bd9751]"></div>
+                           <span class="text-[10px] font-bold uppercase tracking-widest text-[#0b231e]">FONATUR • Comunicación Social</span>
+                        </div>
+                        <button id="btn-copy" class="flex items-center gap-1.5 text-xs bg-[#0b231e] text-white hover:bg-[#13322b] px-4 py-2 rounded font-bold shadow-md transition-all active:scale-95">
+                            <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+                            <span id="btn-copy-text">COPIAR TEXTO</span>
+                        </button>
                     </div>
-                    <button id="btn-copy" class="flex items-center gap-1.5 text-xs bg-[#0b231e] text-white hover:bg-[#13322b] px-4 py-2 rounded font-bold shadow-md transition-all active:scale-95">
-                        <i data-lucide="copy" class="w-3.5 h-3.5"></i>
-                        <span id="btn-copy-text">COPIAR TEXTO</span>
-                    </button>
-                </div>
 
-                <div class="p-12 md:p-16 flex-1 font-serif text-lg leading-relaxed whitespace-pre-wrap selection:bg-[#bd9751]/20 overflow-y-auto">
-                    <div id="alert-content" class="max-w-2xl mx-auto font-news"></div>
-                </div>
+                    <div class="p-12 md:p-16 font-serif text-lg leading-relaxed whitespace-pre-wrap selection:bg-[#bd9751]/20">
+                        <div id="alert-content" class="max-w-2xl mx-auto font-news"></div>
+                    </div>
 
-                <div class="px-12 py-8 border-t border-gray-100 bg-[#f8f9fa] flex justify-between items-center">
-                     <div class="text-[9px] font-bold uppercase tracking-widest text-gray-400">
-                       Gobierno de México | Fonatur
-                     </div>
-                     <div class="w-32 h-8 bg-gray-200 opacity-30 rounded-sm"></div>
+                    <div class="px-12 py-8 border-t border-gray-100 bg-[#f8f9fa] flex justify-between items-center">
+                         <div class="text-[9px] font-bold uppercase tracking-widest text-gray-400">
+                           Gobierno de México | Fonatur
+                         </div>
+                         <div class="w-32 h-8 bg-gray-200 opacity-30 rounded-sm"></div>
+                    </div>
                 </div>
             </div>
         </div>
     </main>
 
-    <!-- Modals (API & Training) -->
+    <!-- Modals -->
     <div id="api-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
         <div class="bg-[#0b231e] border border-[#1a3d35] rounded-lg shadow-2xl w-full max-w-md p-6">
             <div class="flex items-center gap-3 mb-4 text-[#bd9751]">
