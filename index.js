@@ -1,16 +1,15 @@
+
 import { GoogleGenAI } from "@google/genai";
 
 // ==========================================
 // SEGURIDAD: GESTIÓN DE API KEY
 // ==========================================
-// Ya NO hay claves hardcodeadas aquí.
-// La clave se pide al usuario y se guarda en localStorage.
-// ==========================================
-
 let mediaRecorder = null;
 let audioChunks = [];
 let history = [];
 let currentAlertText = "";
+let draggedItemIndex = null;
+let progressInterval = null;
 
 // Variables para "recordar" el archivo si falta la clave o falla la auth
 let pendingBlob = null;
@@ -26,12 +25,10 @@ const btnCopyText = document.getElementById('btn-copy-text');
 const btnSettings = document.getElementById('btn-settings');
 const btnTraining = document.getElementById('btn-training'); 
 
-// Modal Elements (API Key)
+// Modal Elements
 const apiModal = document.getElementById('api-modal');
 const apiKeyInput = document.getElementById('api-key-input');
 const btnSaveKey = document.getElementById('btn-save-key');
-
-// Modal Elements (Training)
 const trainingModal = document.getElementById('training-modal');
 const trainingInput = document.getElementById('training-input');
 const btnSaveTraining = document.getElementById('btn-save-training');
@@ -39,6 +36,10 @@ const btnCloseTraining = document.getElementById('btn-close-training');
 
 const emptyState = document.getElementById('empty-state');
 const loadingState = document.getElementById('loading-state');
+const progressBar = document.getElementById('progress-bar');
+const progressPercentage = document.getElementById('progress-percentage');
+const progressStatus = document.getElementById('progress-status');
+
 const resultContainer = document.getElementById('result-container');
 const alertContent = document.getElementById('alert-content');
 const errorBanner = document.getElementById('error-banner');
@@ -48,7 +49,6 @@ const historyEmpty = document.getElementById('history-empty');
 
 // --- Initialization ---
 document.addEventListener('DOMContentLoaded', () => {
-    // Inicializar iconos de Lucide
     if (window.lucide) {
         window.lucide.createIcons();
     }
@@ -83,60 +83,38 @@ function hideModal() {
 
 btnSaveKey.addEventListener('click', () => {
     const key = apiKeyInput.value.trim();
-    if (key.length > 5) { // Validación mínima
+    if (key.length > 5) {
         localStorage.setItem('fonatur_gemini_key', key);
         hideModal();
         errorBanner.classList.add('hidden');
-        
-        // REANUDAR OPERACIÓN PENDIENTE
-        // Si había un archivo esperando, lo procesamos ahora que tenemos clave nueva
         if (pendingBlob) {
-            showError("Clave actualizada. Reintentando procesar archivo...", false); 
+            showError("Clave actualizada. Reintentando...", false); 
             processAudio(pendingBlob, pendingFileName);
-        } else {
-            showError("Clave guardada correctamente.", false);
         }
     } else {
         alert("Por favor, ingresa una API Key válida.");
     }
 });
 
-btnSettings.addEventListener('click', () => {
-    showModal();
-});
+btnSettings.addEventListener('click', () => showModal());
 
 // --- Training / Style Management ---
 function loadTrainingData() {
     const examples = localStorage.getItem('fonatur_style_examples');
-    if (examples) {
-        trainingInput.value = examples;
-    }
+    if (examples) trainingInput.value = examples;
 }
 
-btnTraining.addEventListener('click', () => {
-    trainingModal.classList.remove('hidden');
-});
-
-btnCloseTraining.addEventListener('click', () => {
-    trainingModal.classList.add('hidden');
-});
+btnTraining.addEventListener('click', () => trainingModal.classList.remove('hidden'));
+btnCloseTraining.addEventListener('click', () => trainingModal.classList.add('hidden'));
 
 btnSaveTraining.addEventListener('click', () => {
-    const examples = trainingInput.value;
-    localStorage.setItem('fonatur_style_examples', examples);
+    localStorage.setItem('fonatur_style_examples', trainingInput.value);
     trainingModal.classList.add('hidden');
-    showError("Ejemplos de estilo guardados.", false);
+    showError("Estilo guardado.", false);
     setTimeout(() => errorBanner.classList.add('hidden'), 2000);
 });
 
-trainingModal.addEventListener('click', (e) => {
-    if (e.target === trainingModal) {
-        trainingModal.classList.add('hidden');
-    }
-});
-
-
-// --- History Management ---
+// --- History & Drag and Drop ---
 function loadHistory() {
     const saved = localStorage.getItem('fonatur_alert_history');
     if (saved) {
@@ -146,13 +124,8 @@ function loadHistory() {
 }
 
 function saveToHistory(content, audioName) {
-    const newAlert = {
-        id: Date.now().toString(),
-        timestamp: Date.now(),
-        content,
-        audioName
-    };
-    history = [newAlert, ...history].slice(0, 20); 
+    const newAlert = { id: Date.now().toString(), timestamp: Date.now(), content, audioName };
+    history = [newAlert, ...history].slice(0, 30); 
     localStorage.setItem('fonatur_alert_history', JSON.stringify(history));
     renderHistory();
 }
@@ -169,24 +142,93 @@ function renderHistory() {
         historyEmpty.classList.add('hidden');
         btnClearHistory.classList.remove('hidden');
         
-        history.forEach(item => {
-            const btn = document.createElement('button');
-            btn.className = "w-full text-left p-3 rounded-lg bg-[#13322b]/40 hover:bg-[#13322b] border border-[#1a3d35] transition-all group mb-2";
-            btn.onclick = () => showResult(item.content);
+        history.forEach((item, index) => {
+            const btn = document.createElement('div');
+            btn.className = "w-full cursor-grab active:cursor-grabbing p-3 rounded-lg bg-[#13322b]/40 hover:bg-[#13322b] border border-[#1a3d35] transition-all group mb-2 relative";
+            btn.draggable = true;
             
+            btn.ondragstart = (e) => {
+                draggedItemIndex = index;
+                e.dataTransfer.effectAllowed = 'move';
+                btn.classList.add('opacity-50', 'border-[#bd9751]');
+            };
+
+            btn.ondragover = (e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+            };
+
+            btn.ondrop = (e) => {
+                e.preventDefault();
+                if (draggedItemIndex !== null && draggedItemIndex !== index) {
+                    const movedItem = history.splice(draggedItemIndex, 1)[0];
+                    history.splice(index, 0, movedItem);
+                    localStorage.setItem('fonatur_alert_history', JSON.stringify(history));
+                    renderHistory();
+                }
+                draggedItemIndex = null;
+            };
+
+            btn.ondragend = () => {
+                btn.classList.remove('opacity-50', 'border-[#bd9751]');
+            };
+
             const dateStr = new Date(item.timestamp).toLocaleDateString('es-MX');
-            const title = item.audioName || "Comunicado Generado";
+            const title = item.audioName || "Comunicado";
 
             btn.innerHTML = `
-                <p class="text-[10px] text-[#bd9751] font-bold mb-1 opacity-70">${dateStr}</p>
-                <p class="text-sm font-medium line-clamp-2 text-gray-300 group-hover:text-white">${title}</p>
+                <div class="pointer-events-none">
+                    <p class="text-[10px] text-[#bd9751] font-bold mb-1 opacity-70">${dateStr}</p>
+                    <p class="text-sm font-medium line-clamp-2 text-gray-300 group-hover:text-white">${title}</p>
+                </div>
             `;
+            
+            btn.onclick = (e) => {
+                if(e.target === btn || e.target.parentElement === btn) {
+                    showResult(item.content);
+                }
+            };
+            
             historyList.appendChild(btn);
         });
     }
 }
 
-// --- UI Transitions ---
+// --- Loading State & Progress Management ---
+function updateProgress(value, statusText) {
+    progressBar.style.width = `${value}%`;
+    progressPercentage.innerText = `${Math.round(value)}%`;
+    if (statusText) progressStatus.innerText = statusText;
+}
+
+function startSimulatedProgress() {
+    let current = 0;
+    clearInterval(progressInterval);
+    updateProgress(0, "Cargando archivo...");
+    
+    progressInterval = setInterval(() => {
+        if (current < 40) {
+            current += 1.5;
+            updateProgress(current, "Subiendo audio a la nube...");
+        } else if (current < 85) {
+            current += 0.4;
+            updateProgress(current, "Analizando transcripción...");
+        } else if (current < 95) {
+            current += 0.05;
+            updateProgress(current, "Generando redacción institucional...");
+        }
+    }, 200);
+}
+
+function stopProgress(success = true) {
+    clearInterval(progressInterval);
+    if (success) {
+        updateProgress(100, "Completado");
+    } else {
+        updateProgress(0, "Error");
+    }
+}
+
 function setLoading(isLoading) {
     if (isLoading) {
         emptyState.classList.add('hidden');
@@ -194,14 +236,11 @@ function setLoading(isLoading) {
         loadingState.classList.remove('hidden');
         btnRecord.disabled = true;
         fileInput.disabled = true;
-        
-        const loadingText = loadingState.querySelector('h3');
-        if (loadingText) loadingText.textContent = "Subiendo y analizando...";
+        startSimulatedProgress();
     } else {
         btnRecord.disabled = false;
         fileInput.disabled = false;
-        const loadingText = loadingState.querySelector('h3');
-        if (loadingText) loadingText.textContent = "Generando Síntesis...";
+        loadingState.classList.add('hidden');
     }
 }
 
@@ -217,98 +256,50 @@ function showResult(text) {
 function showError(msg, isError = true) {
     errorMessage.textContent = msg;
     errorBanner.classList.remove('hidden');
-    
     if (isError) {
         setLoading(false); 
+        stopProgress(false);
         loadingState.classList.add('hidden');
         emptyState.classList.remove('hidden'); 
     }
-    
-    // Si es un mensaje de éxito, se oculta solo
-    if (!isError) {
-        setTimeout(() => {
-            errorBanner.classList.add('hidden');
-        }, 5000);
-    }
+    if (!isError) setTimeout(() => errorBanner.classList.add('hidden'), 5000);
 }
 
-// --- Helper: Mime Type ---
+// --- Helpers ---
 function getMimeType(blob, fileName) {
-    // Si el navegador detectó el tipo, confiamos en él, excepto si es genérico
-    if (blob.type && blob.type !== 'application/octet-stream') {
-        return blob.type;
-    }
-    
-    // Fallback basado en extensión
+    if (blob.type && blob.type !== 'application/octet-stream') return blob.type;
     const ext = fileName.split('.').pop().toLowerCase();
     const mimeMap = {
-        'mp3': 'audio/mp3',
-        'wav': 'audio/wav',
-        'm4a': 'audio/mp4',
-        'mp4': 'video/mp4', // GenAI soporta video/mp4
-        'webm': 'audio/webm',
-        'ogg': 'audio/ogg',
-        'aac': 'audio/aac',
-        'flac': 'audio/flac',
-        'mpeg': 'audio/mpeg',
-        'mov': 'video/mov',
-        'avi': 'video/avi'
+        'mp3': 'audio/mp3', 'wav': 'audio/wav', 'm4a': 'audio/mp4', 'mp4': 'video/mp4',
+        'webm': 'audio/webm', 'mpeg': 'audio/mpeg', 'mpg': 'audio/mpeg'
     };
-    
-    return mimeMap[ext] || 'audio/mp3'; // Default seguro
+    return mimeMap[ext] || 'audio/mpeg';
 }
 
-// --- Helper: Parse Error ---
-function parseErrorMessage(err) {
-    let rawMessage = err.message || "Error desconocido";
-    let finalMessage = rawMessage;
-
-    // Intentar parsear JSON anidado
-    try {
-        if (rawMessage.includes('{')) {
-            // A veces el mensaje es un string que contiene JSON
-            const jsonStart = rawMessage.indexOf('{');
-            const jsonPart = rawMessage.substring(jsonStart);
-            const parsed = JSON.parse(jsonPart);
-            
-            if (parsed.error) {
-                if (parsed.error.message) {
-                    // A veces el inner message también es JSON string
-                    try {
-                        const inner = JSON.parse(parsed.error.message);
-                        finalMessage = inner.error.message || parsed.error.message;
-                    } catch {
-                        finalMessage = parsed.error.message;
-                    }
-                }
-            }
-        }
-    } catch (e) {
-        // Fallback al rawMessage
-    }
-
-    return finalMessage;
-}
-
-
-// --- Audio & AI Logic ---
 function getCurrentDateFormatted() {
     const date = new Date();
-    const formatted = date.toLocaleDateString('es-MX', { 
-      weekday: 'long', 
-      day: 'numeric', 
-      month: 'long', 
-      year: 'numeric' 
-    });
+    const options = { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' };
+    let formatted = date.toLocaleDateString('es-MX', options);
+    formatted = formatted.replace(',', '');
     return formatted.charAt(0).toUpperCase() + formatted.slice(1);
 }
 
+function parseErrorMessage(err) {
+    let raw = err.message || "Error desconocido";
+    try {
+        if (raw.includes('{')) {
+            const start = raw.indexOf('{');
+            const parsed = JSON.parse(raw.substring(start));
+            return parsed.error?.message || raw;
+        }
+    } catch (e) {}
+    return raw;
+}
+
+// --- Audio & AI Logic ---
 async function processAudio(blob, fileName = "Audio Institucional") {
     const apiKey = getApiKey();
-    
-    // Si no hay API Key, guardamos el intento y pedimos la clave
     if (!apiKey) {
-        console.log("Falta API Key, solicitando...");
         pendingBlob = blob;
         pendingFileName = fileName;
         showModal();
@@ -317,70 +308,48 @@ async function processAudio(blob, fileName = "Audio Institucional") {
 
     setLoading(true);
     const systemDate = getCurrentDateFormatted();
-    
     const userExamples = localStorage.getItem('fonatur_style_examples') || "";
-    let trainingContext = "";
-    if (userExamples.trim().length > 0) {
-        trainingContext = `
-        IMPORTANTE - REFERENCIAS DE ESTILO:
-        A continuación se presentan ejemplos de redacción aprobados. 
-        Analiza el tono, la estructura de los párrafos y el vocabulario institucional de estos ejemplos e IMITA este estilo en tu respuesta:
-        
-        """
-        ${userExamples}
-        """
-        `;
-    }
+    let trainingContext = userExamples.trim().length > 0 ? `\nESTILO DE REFERENCIA (IMÍTALO):\n${userExamples}\n` : "";
 
     try {
         const reader = new FileReader();
         reader.readAsDataURL(blob);
         reader.onloadend = async () => {
-            // Validar base64
-            if (!reader.result) {
-                showError("Error al leer el archivo. Intente de nuevo.");
-                return;
-            }
-
             const base64Data = reader.result.split(',')[1];
             const mimeType = getMimeType(blob, fileName);
-
-            const ai = new GoogleGenAI({ apiKey: apiKey });
+            const ai = new GoogleGenAI({ apiKey });
             
             const prompt = `
-              Actúa como un redactor senior de Comunicación Social. Tu tarea es escuchar el audio adjunto y generar una 'Alerta de Prensa' de alta calidad periodística.
+              Actúa como un redactor senior de Comunicación Social de FONATUR. Tu tarea es escuchar el audio y generar una 'Alerta de Prensa' fidedigna.
 
-              REGLA DE ORO DE IDENTIFICACIÓN:
-              1. Debes reconocer primordialmente si quien habla es la Presidenta Claudia Sheinbaum Pardo (o si el audio corresponde a su conferencia de prensa matutina).
-              2. Si es ella, el encabezado DEBE ser: "Alerta de conferencia de prensa de la Presidenta Claudia Sheinbaum Pardo".
-              3. Si es cualquier otro funcionario o un comunicado general de la institución, usa: "Alerta de prensa de FONATUR".
+              REGLAS DE ORO:
+              1. **LEALTAD AL AUDIO**: NO agregues información, datos, cifras o contexto que no aparezcan explícitamente en el audio. Si el audio no lo dice, la alerta no lo pone.
+              2. **IDENTIFICACIÓN DE VOZ**: Debes identificar con precisión si quien habla es la Presidenta Claudia Sheinbaum Pardo. También identifica a otros funcionarios públicos si son mencionados o reconocibles por su cargo.
+              3. **ENCABEZADO**: Debe reflejar al orador. Ejemplo: "Alerta de conferencia de prensa de la Presidenta Claudia Sheinbaum Pardo" o "Alerta de prensa de FONATUR".
 
+              REGLAS DE FORMATO CRÍTICAS:
+              1. USA EXACTAMENTE UN ASTERISCO (*) al inicio y al final del Título y del Subtítulo. Ejemplo: *Título de la noticia*
+              2. LA FECHA DEBE SER: ${systemDate}. NO pongas comas antes del número del día.
+              
               ${trainingContext}
 
-              DEBES seguir estrictamente este formato:
-              
+              ESTRUCTURA OBLIGATORIA:
               ---
-              [ENCABEZADO DETERMINADO POR EL HABLANTE]
+              [ENCABEZADO INSTITUCIONAL SEGÚN EL ORADOR]
               ${systemDate}
 
-              [TITULAR EN NEGRITA QUE RESUMA LA NOTICIA O ANUNCIO PRINCIPAL]
-              [Primer párrafo: Resumen ejecutivo. Si es la Presidenta, comienza con "La Presidenta Claudia Sheinbaum Pardo explicó que..." o similar. Identifica claramente al actor principal.]
+              *TITULAR RESUMEN*
+              [Párrafo de inicio que identifique claramente quién habla y el tema central del audio].
 
-              [Párrafos siguientes: Detalles específicos, datos técnicos, mención de otras dependencias (Secretaría de Economía, Hacienda, etc.) y contexto relevante.]
-              
-              [Párrafo de cierre: Próximos pasos, equipos de trabajo mencionados o cierre institucional.]
+              [Cuerpo con los puntos clave, detalles técnicos y dependencias que se mencionen EXCLUSIVAMENTE en el audio].
+
+              [Cierre institucional basado en el audio].
               ---
 
-              Instrucciones adicionales:
-              1. LA FECHA DEL TÍTULO DEBE SER EXACTAMENTE: ${systemDate}.
-              2. Identifica con precisión nombres propios y cargos.
-              3. Mantén un tono formal, periodístico, institucional y asertivo.
-              4. No agregues introducciones, conclusiones ni comentarios personales. Entrega directamente el texto de la alerta.
-              5. El idioma debe ser Español.
+              Instrucciones Finales: Entrega solo el texto resultante en español, con tono formal, periodístico e institucional. No inventes nada.
             `;
 
             try {
-                // Usamos streaming
                 const responseStream = await ai.models.generateContentStream({
                     model: 'gemini-3-flash-preview',
                     contents: {
@@ -392,21 +361,18 @@ async function processAudio(blob, fileName = "Audio Institucional") {
                 });
 
                 let fullText = "";
-                let isFirstChunk = true;
+                let isFirst = true;
 
                 for await (const chunk of responseStream) {
-                    const chunkText = chunk.text;
-                    if (chunkText) {
-                        fullText += chunkText;
-
-                        if (isFirstChunk) {
+                    if (chunk.text) {
+                        fullText += chunk.text;
+                        if (isFirst) {
+                            stopProgress(true);
                             loadingState.classList.add('hidden');
                             resultContainer.classList.remove('hidden');
                             emptyState.classList.add('hidden');
-                            window.scrollTo({ top: 0, behavior: 'smooth' });
-                            isFirstChunk = false;
+                            isFirst = false;
                         }
-                        
                         alertContent.innerText = fullText;
                     }
                 }
@@ -415,81 +381,41 @@ async function processAudio(blob, fileName = "Audio Institucional") {
                     currentAlertText = fullText;
                     saveToHistory(fullText, fileName);
                     setLoading(false);
-                    loadingState.classList.add('hidden');
-                    resultContainer.classList.remove('hidden');
-                    
-                    // ÉXITO: Limpiamos los pendientes
                     pendingBlob = null;
-                    pendingFileName = "";
-                } else {
-                    throw new Error("El modelo no generó texto.");
                 }
-
             } catch (err) {
-                console.error("Error GenAI:", err);
-                
-                const rawError = parseErrorMessage(err);
-                let msg = "Error de IA: " + rawError;
-                let isAuthError = false;
-
-                // Detección mejorada de errores
-                if (rawError.includes('403') || rawError.includes('API key') || rawError.includes('permission') || rawError.includes('key not valid') || rawError.includes('400')) {
-                    msg = "Error de Autenticación: Google rechazó la API Key. Verifica que la clave sea correcta.";
-                    isAuthError = true;
-                } else if (rawError.includes('429')) {
-                    msg = "Límite de cuota excedido (429). Espera unos minutos.";
-                } else if (rawError.includes('503')) {
-                    msg = "Servicio no disponible (503). Intenta de nuevo más tarde.";
-                } else if (rawError.includes('500') || rawError.includes('Internal error')) {
-                    msg = "Error Interno de Google (500). El archivo podría ser demasiado complejo o tener un formato de video no compatible. Intenta convertirlo a MP3 o reducir su tamaño.";
-                }
-
-                showError(msg);
-
-                if (isAuthError) {
-                    // Mantenemos el archivo en memoria pero NO abrimos modal auto
+                const rawErr = parseErrorMessage(err);
+                showError("Error de IA: " + rawErr);
+                if (rawErr.includes('403') || rawErr.includes('key')) {
                     pendingBlob = blob;
                     pendingFileName = fileName;
-                } else {
-                    // Si es otro error, limpiamos
-                    pendingBlob = null;
-                    pendingFileName = "";
                 }
             }
         };
     } catch (err) {
-        showError("Error procesando archivo: " + err.message);
-        pendingBlob = null;
+        showError("Error al procesar: " + err.message);
     }
 }
 
-// --- Event Listeners ---
+// --- Listeners ---
 btnRecord.addEventListener('click', async () => {
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         mediaRecorder = new MediaRecorder(stream);
         audioChunks = [];
-
-        mediaRecorder.ondataavailable = (e) => {
-            if (e.data.size > 0) audioChunks.push(e.data);
-        };
-
+        mediaRecorder.ondataavailable = (e) => audioChunks.push(e.data);
         mediaRecorder.onstop = () => {
-            const blob = new Blob(audioChunks, { type: 'audio/webm' });
-            processAudio(blob, "Grabación Fonatur");
-            stream.getTracks().forEach(track => track.stop());
+            processAudio(new Blob(audioChunks, { type: 'audio/webm' }), "Grabación Directa");
+            stream.getTracks().forEach(t => t.stop());
         };
-
         mediaRecorder.start();
         btnRecord.classList.add('hidden');
         btnStop.classList.remove('hidden');
-    } catch (err) {
-        showError("No se pudo acceder al micrófono. Verifique permisos.");
-    }
+    } catch (err) { showError("Micrófono no disponible."); }
 });
 
 btnStop.addEventListener('click', () => {
-    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+    if (mediaRecorder?.state !== 'inactive') {
         mediaRecorder.stop();
         btnStop.classList.add('hidden');
         btnRecord.classList.remove('hidden');
@@ -499,14 +425,10 @@ btnStop.addEventListener('click', () => {
 fileInput.addEventListener('change', (e) => {
     const file = e.target.files[0];
     if (file) {
-        // Límite de seguridad: 15MB para asegurar que con base64 no pase de 20MB
-        const MAX_SIZE = 15 * 1024 * 1024; 
-        if (file.size > MAX_SIZE) {
-            showError("El archivo es demasiado grande (>15MB). Por favor comprímalo o use audio MP3.", true);
-            fileInput.value = '';
+        if (file.size > 15 * 1024 * 1024) {
+            showError("Archivo muy grande (>15MB).", true);
             return;
         }
-
         processAudio(file, file.name);
     }
     fileInput.value = '';
@@ -515,16 +437,13 @@ fileInput.addEventListener('change', (e) => {
 btnCopy.addEventListener('click', () => {
     if (currentAlertText) {
         navigator.clipboard.writeText(currentAlertText);
-        const originalText = btnCopyText.innerText;
         btnCopyText.innerText = "COPIADO";
-        setTimeout(() => {
-            btnCopyText.innerText = originalText;
-        }, 2000);
+        setTimeout(() => btnCopyText.innerText = "COPIAR TEXTO", 2000);
     }
 });
 
 btnClearHistory.addEventListener('click', () => {
-    if (confirm("¿Estás seguro de borrar todo el historial?")) {
+    if (confirm("¿Borrar todo el historial?")) {
         history = [];
         localStorage.removeItem('fonatur_alert_history');
         renderHistory();
