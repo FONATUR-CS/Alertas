@@ -281,10 +281,16 @@ function getMimeType(blob, fileName) {
 
 function getCurrentDateFormatted() {
     const date = new Date();
-    const options = { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' };
-    let formatted = date.toLocaleDateString('es-MX', options);
-    // Eliminar la coma tras el día de la semana
-    formatted = formatted.replace(',', '');
+    const weekdays = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+    const months = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+    
+    const dayName = weekdays[date.getDay()];
+    const dayNum = date.getDate();
+    const monthName = months[date.getMonth()];
+    const year = date.getFullYear();
+    
+    const formatted = `${dayName} ${dayNum} de ${monthName} de ${year}`;
+    // Capitalizar solo la primera letra del día de la semana
     return formatted.charAt(0).toUpperCase() + formatted.slice(1);
 }
 
@@ -328,14 +334,14 @@ async function processAudio(blob, fileName = "Audio Institucional") {
 
               REGLAS DE ORO (VERACIDAD):
               1. **LEALTAD AL AUDIO**: NO agregues información, datos o contexto que no aparezcan en el audio. Si el audio no lo menciona, tú no lo escribes.
-              2. **IDENTIFICACIÓN DE VOZ**: Identifica con precisión a la Presidenta Claudia Sheinbaum Pardo y a otros funcionarios si son reconocibles.
+              2. **IDENTIFICACIÓN DE VOZ**: Identifica con precisión a la Presidenta Claudia Sheinbaum Pardo y a otros funcionarios si son reconocibles por su voz.
               3. **ESTILO**: Formal, institucional y periodístico.
 
               REGLAS DE FORMATO CRÍTICAS:
-              1. **ENCABEZADO**: El encabezado (Ej: *Alerta de prensa de FONATUR*) debe llevar exactamente un asterisco (*) al inicio y uno al final. 
-              2. **FECHA**: La fecha (Ej: ${systemDate}) NO debe llevar asteriscos ni ningún otro formato. Debe aparecer en texto plano.
-              3. **TITULAR**: El titular debe llevar un asterisco (*) al inicio y uno al final (Ej: *México impulsa el desarrollo ferroviario*).
-              4. **CUERPO DE LA ALERTA**: Los párrafos de desarrollo NO deben contener ningún asterisco, ni negritas, ni cursivas. Debe ser texto plano sin formato Markdown.
+              1. **ENCABEZADO**: El encabezado (Ej: *Alerta de prensa de la Presidenta Claudia Sheinbaum Pardo*) debe llevar exactamente un asterisco (*) al inicio y uno al final. 
+              2. **FECHA**: La fecha DEBE SER EXACTAMENTE: ${systemDate}. NO debe llevar asteriscos ni ningún otro formato. Texto plano únicamente.
+              3. **TITULAR**: El titular resumen debe llevar un asterisco (*) al inicio y uno al final (Ej: *México impulsa el desarrollo ferroviario*).
+              4. **CUERPO DE LA ALERTA**: Los párrafos de desarrollo NO deben contener ningún asterisco ni formato Markdown. Texto plano.
 
               ${trainingContext}
 
@@ -351,7 +357,7 @@ async function processAudio(blob, fileName = "Audio Institucional") {
               [Cierre institucional basado en el audio, sin asteriscos].
               ---
 
-              Instrucciones Finales: Entrega solo el texto resultante en español. No inventes nada.
+              Instrucciones Finales: Entrega solo el texto resultante en español. La fecha debe ser exactamente la que te proporcioné. No inventes nada.
             `;
 
             try {
