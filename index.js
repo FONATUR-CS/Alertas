@@ -101,7 +101,24 @@ btnSaveKey.addEventListener('click', () => {
 btnSettings.addEventListener('click', () => showModal());
 
 // --- Training / Style Management ---
-function loadTrainingData() {
+async function loadTrainingData() {
+    try {
+        // Intenta cargar la configuración centralizada (repo)
+        const response = await fetch('training.json');
+        if (response.ok) {
+            const data = await response.json();
+            if (data.style_examples) {
+                console.log("Cargado entrenamiento centralizado.");
+                trainingInput.value = data.style_examples;
+                localStorage.setItem('fonatur_style_examples', data.style_examples);
+                return; // Prioridad al archivo central
+            }
+        }
+    } catch (e) {
+        console.warn("No se pudo cargar training.json (probablemente offline o local file system). Usando caché.", e);
+    }
+
+    // Fallback: LocalStorage
     const examples = localStorage.getItem('fonatur_style_examples');
     if (examples) trainingInput.value = examples;
 }
