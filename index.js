@@ -23,7 +23,7 @@ const btnClearHistory = document.getElementById('btn-clear-history');
 const btnCopy = document.getElementById('btn-copy');
 const btnCopyText = document.getElementById('btn-copy-text');
 const btnSettings = document.getElementById('btn-settings');
-const btnTraining = document.getElementById('btn-training'); 
+const btnTraining = document.getElementById('btn-training');
 
 // Modal Elements
 const apiModal = document.getElementById('api-modal');
@@ -32,6 +32,8 @@ const btnSaveKey = document.getElementById('btn-save-key');
 const trainingModal = document.getElementById('training-modal');
 const trainingInput = document.getElementById('training-input');
 const btnSaveTraining = document.getElementById('btn-save-training');
+const btnExportTraining = document.getElementById('btn-export-training');
+const inputImportTraining = document.getElementById('input-import-training');
 const btnCloseTraining = document.getElementById('btn-close-training');
 
 const emptyState = document.getElementById('empty-state');
@@ -73,7 +75,7 @@ function checkApiKey() {
 
 function showModal() {
     const key = getApiKey();
-    if (key) apiKeyInput.value = key; 
+    if (key) apiKeyInput.value = key;
     apiModal.classList.remove('hidden');
 }
 
@@ -88,7 +90,7 @@ btnSaveKey.addEventListener('click', () => {
         hideModal();
         errorBanner.classList.add('hidden');
         if (pendingBlob) {
-            showError("Clave actualizada. Reintentando...", false); 
+            showError("Clave actualizada. Reintentando...", false);
             processAudio(pendingBlob, pendingFileName);
         }
     } else {
@@ -114,6 +116,46 @@ btnSaveTraining.addEventListener('click', () => {
     setTimeout(() => errorBanner.classList.add('hidden'), 2000);
 });
 
+btnExportTraining.addEventListener('click', () => {
+    const data = {
+        style_examples: trainingInput.value,
+        timestamp: new Date().toISOString()
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `fonatur_estilo_${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+});
+
+inputImportTraining.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+        try {
+            const data = JSON.parse(event.target.result);
+            if (data.style_examples !== undefined) {
+                trainingInput.value = data.style_examples;
+                localStorage.setItem('fonatur_style_examples', data.style_examples);
+                showError("Estilo importado correctamente.", false);
+                setTimeout(() => errorBanner.classList.add('hidden'), 2000);
+            } else {
+                alert("El archivo no tiene el formato correcto.");
+            }
+        } catch (err) {
+            alert("Error al leer el archivo JSON.");
+        }
+    };
+    reader.readAsText(file);
+    e.target.value = ''; // Reset input to allow re-importing the same file
+});
+
 // --- History & Drag and Drop ---
 function loadHistory() {
     const saved = localStorage.getItem('fonatur_alert_history');
@@ -125,7 +167,7 @@ function loadHistory() {
 
 function saveToHistory(content, audioName) {
     const newAlert = { id: Date.now().toString(), timestamp: Date.now(), content, audioName };
-    history = [newAlert, ...history].slice(0, 30); 
+    history = [newAlert, ...history].slice(0, 30);
     localStorage.setItem('fonatur_alert_history', JSON.stringify(history));
     renderHistory();
 }
@@ -141,12 +183,12 @@ function renderHistory() {
     } else {
         historyEmpty.classList.add('hidden');
         btnClearHistory.classList.remove('hidden');
-        
+
         history.forEach((item, index) => {
             const btn = document.createElement('div');
             btn.className = "w-full cursor-grab active:cursor-grabbing p-3 rounded-lg bg-[#13322b]/40 hover:bg-[#13322b] border border-[#1a3d35] transition-all group mb-2 relative";
             btn.draggable = true;
-            
+
             btn.ondragstart = (e) => {
                 draggedItemIndex = index;
                 e.dataTransfer.effectAllowed = 'move';
@@ -182,13 +224,13 @@ function renderHistory() {
                     <p class="text-sm font-medium line-clamp-2 text-gray-300 group-hover:text-white">${title}</p>
                 </div>
             `;
-            
+
             btn.onclick = (e) => {
-                if(e.target === btn || e.target.parentElement === btn) {
+                if (e.target === btn || e.target.parentElement === btn) {
                     showResult(item.content);
                 }
             };
-            
+
             historyList.appendChild(btn);
         });
     }
@@ -205,7 +247,7 @@ function startSimulatedProgress() {
     let current = 0;
     clearInterval(progressInterval);
     updateProgress(0, "Cargando archivo...");
-    
+
     progressInterval = setInterval(() => {
         if (current < 40) {
             current += 1.5;
@@ -250,7 +292,7 @@ function showResult(text) {
     emptyState.classList.add('hidden');
     loadingState.classList.add('hidden');
     resultContainer.classList.remove('hidden');
-    
+
     // Desplazar el área de trabajo al inicio del resultado
     const workspace = document.querySelector('.flex-1.overflow-y-auto');
     if (workspace) workspace.scrollTo({ top: 0, behavior: 'smooth' });
@@ -260,10 +302,10 @@ function showError(msg, isError = true) {
     errorMessage.textContent = msg;
     errorBanner.classList.remove('hidden');
     if (isError) {
-        setLoading(false); 
+        setLoading(false);
         stopProgress(false);
         loadingState.classList.add('hidden');
-        emptyState.classList.remove('hidden'); 
+        emptyState.classList.remove('hidden');
     }
     if (!isError) setTimeout(() => errorBanner.classList.add('hidden'), 5000);
 }
@@ -274,7 +316,7 @@ function getMimeType(blob, fileName) {
     const ext = fileName.split('.').pop().toLowerCase();
     const mimeMap = {
         'mp3': 'audio/mp3', 'wav': 'audio/wav', 'm4a': 'audio/mp4', 'mp4': 'video/mp4',
-        'webm': 'audio/webm', 'mpeg': 'audio/mpeg', 'mpg': 'audio/mpeg'
+        'webm': 'audio/webm', 'mpeg': 'video/mpeg', 'mpg': 'video/mpeg'
     };
     return mimeMap[ext] || 'audio/mpeg';
 }
@@ -283,12 +325,12 @@ function getCurrentDateFormatted() {
     const date = new Date();
     const weekdays = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
     const months = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
-    
+
     const dayName = weekdays[date.getDay()];
     const dayNum = date.getDate();
     const monthName = months[date.getMonth()];
     const year = date.getFullYear();
-    
+
     const formatted = `${dayName} ${dayNum} de ${monthName} de ${year}`;
     // Capitalizar solo la primera letra del día de la semana
     return formatted.charAt(0).toUpperCase() + formatted.slice(1);
@@ -302,7 +344,7 @@ function parseErrorMessage(err) {
             const parsed = JSON.parse(raw.substring(start));
             return parsed.error?.message || raw;
         }
-    } catch (e) {}
+    } catch (e) { }
     return raw;
 }
 
@@ -328,7 +370,7 @@ async function processAudio(blob, fileName = "Audio Institucional") {
             const base64Data = reader.result.split(',')[1];
             const mimeType = getMimeType(blob, fileName);
             const ai = new GoogleGenAI({ apiKey });
-            
+
             const prompt = `
               Actúa como un redactor senior de Comunicación Social de FONATUR. Tu tarea es escuchar el audio y generar una 'Alerta de Prensa' fidedigna.
 
