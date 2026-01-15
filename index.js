@@ -395,12 +395,17 @@ async function processAudio(blob, fileName = "Audio Institucional") {
               1. **LEALTAD AL AUDIO**: NO agregues información, datos o contexto que no aparezcan en el audio. Si el audio no lo menciona, tú no lo escribes.
               2. **IDENTIFICACIÓN DE VOZ**: Identifica con precisión a la Presidenta Claudia Sheinbaum Pardo y a otros funcionarios si son reconocibles por su voz.
               3. **ESTILO**: Formal, institucional y periodístico.
+              4. **AUDIO POCO CLARO**: Si hay fragmentos inaudibles o ambiguos, omite esa información. Nunca inventes ni supongas datos.
 
               REGLAS DE FORMATO CRÍTICAS:
               1. **ENCABEZADO**: El encabezado (Ej: *Alerta de prensa de la Presidenta Claudia Sheinbaum Pardo*) debe llevar exactamente un asterisco (*) al inicio y uno al final. 
               2. **FECHA**: La fecha DEBE SER EXACTAMENTE: ${systemDate}. NO debe llevar asteriscos ni ningún otro formato. Texto plano únicamente.
               3. **TITULAR**: El titular resumen debe llevar un asterisco (*) al inicio y uno al final (Ej: *México impulsa el desarrollo ferroviario*).
               4. **CUERPO DE LA ALERTA**: Los párrafos de desarrollo NO deben contener ningún asterisco ni formato Markdown. Texto plano.
+
+              REGLAS DE REDACCIÓN:
+              1. **LONGITUD**: Máximo 4 párrafos en el cuerpo de la alerta (sin contar encabezado ni titular).
+              2. **NOMBRES OFICIALES**: La primera mención de instituciones debe usar el nombre completo (ej: "Fondo Nacional de Fomento al Turismo" antes de "FONATUR").
 
               ${trainingContext}
 
@@ -411,12 +416,12 @@ async function processAudio(blob, fileName = "Audio Institucional") {
 
               *[TITULAR RESUMEN]*
 
-              [Cuerpo de la alerta: Texto plano sin asteriscos, organizado en párrafos claros, fiel al audio].
+              [Cuerpo de la alerta: Texto plano sin asteriscos, Máximo 4 párrafos en texto plano sin asteriscos, organizado claramente, fiel al audio].
 
               [Cierre institucional basado en el audio, sin asteriscos].
               ---
 
-              Instrucciones Finales: Entrega solo el texto resultante en español. La fecha debe ser exactamente la que te proporcioné. No inventes nada.
+              Instrucciones Finales: Entrega solo el texto resultante en español. La fecha debe ser exactamente la que te proporcioné.
             `;
 
             try {
