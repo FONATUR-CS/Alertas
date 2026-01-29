@@ -482,7 +482,7 @@ Entrega SOLO el texto final en español, siguiendo la estructura exacta. La fech
 
             try {
                 const responseStream = await ai.models.generateContentStream({
-                    model: 'gemini-3-pro-preview',
+                    model: 'gemini-2.5-pro',
                     contents: {
                         parts: [
                             { inlineData: { data: base64Data, mimeType: mimeType } },
