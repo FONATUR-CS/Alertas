@@ -1,5 +1,5 @@
 
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, createUserContent, createPartFromUri } from "@google/genai";
 
 // ==========================================
 // SEGURIDAD: GESTIÓN DE API KEY
@@ -375,20 +375,40 @@ async function processAudio(blob, fileName = "Audio Institucional") {
         return;
     }
 
+    // Límite práctico (evita que el navegador se “congele” con archivos enormes).
+    // Nota: usando Files API ya no estamos limitados por el payload de 20 MB en generateContent,
+    // pero subir archivos gigantes desde el navegador puede tardar demasiado.
+    const MAX_UPLOAD_MB = 120;
+    if (blob.size > MAX_UPLOAD_MB * 1024 * 1024) {
+        showError(`Archivo muy grande (>${MAX_UPLOAD_MB}MB).`, true);
+        return;
+    }
+
     setLoading(true);
     const systemDate = getCurrentDateFormatted();
     const userExamples = localStorage.getItem('fonatur_style_examples') || "";
-    let trainingContext = userExamples.trim().length > 0 ? `\nESTILO DE REFERENCIA (IMÍTALO):\n${userExamples}\n` : "";
+    let trainingContext = userExamples.trim().length > 0 ? `
+ESTILO DE REFERENCIA (IMÍTALO):
+${userExamples}
+` : "";
+
+    const ai = new GoogleGenAI({ apiKey });
+    const mimeType = getMimeType(blob, fileName);
+
+    // Referencia a archivo subido (para borrarlo al finalizar).
+    let uploadedFile = null;
 
     try {
-        const reader = new FileReader();
-        reader.readAsDataURL(blob);
-        reader.onloadend = async () => {
-            const base64Data = reader.result.split(',')[1];
-            const mimeType = getMimeType(blob, fileName);
-            const ai = new GoogleGenAI({ apiKey });
+        // 1) Subir archivo con Files API (recomendado para requests >20MB).
+        updateProgress(10, "Subiendo archivo…");
+        uploadedFile = await ai.files.upload({
+            file: blob,
+            config: { mimeType }
+        });
 
-            const prompt = `
+        updateProgress(35, "Archivo cargado. Enviando a IA…");
+
+        const prompt = `
  ACTÚA COMO:
 Redactor/a senior de Comunicación Social de FONATUR.
 
@@ -477,56 +497,55 @@ ${systemDate}
 
 INSTRUCCIÓN FINAL:
 Entrega SOLO el texto final en español, siguiendo la estructura exacta. La fecha debe ser exactamente ${systemDate}.
-
             `;
 
-            try {
-                const responseStream = await ai.models.generateContentStream({
-                    model: 'gemini-3-flash-preview',
-                    contents: {
-                        parts: [
-                            { inlineData: { data: base64Data, mimeType: mimeType } },
-                            { text: prompt }
-                        ]
-                    }
-                });
+        // 2) Generar contenido referenciando el archivo subido (sin base64).
+        const responseStream = await ai.models.generateContentStream({
+            model: 'gemini-3-flash-preview',
+            contents: createUserContent([
+                createPartFromUri(uploadedFile.uri, uploadedFile.mimeType || mimeType),
+                prompt
+            ])
+        });
 
-                let fullText = "";
-                let isFirst = true;
+        let fullText = "";
+        let isFirst = true;
 
-                for await (const chunk of responseStream) {
-                    if (chunk.text) {
-                        fullText += chunk.text;
-                        if (isFirst) {
-                            stopProgress(true);
-                            loadingState.classList.add('hidden');
-                            resultContainer.classList.remove('hidden');
-                            emptyState.classList.add('hidden');
-                            isFirst = false;
-                        }
-                        alertContent.innerText = fullText;
-                    }
+        for await (const chunk of responseStream) {
+            if (chunk.text) {
+                fullText += chunk.text;
+                if (isFirst) {
+                    stopProgress(true);
+                    loadingState.classList.add('hidden');
+                    resultContainer.classList.remove('hidden');
+                    emptyState.classList.add('hidden');
+                    isFirst = false;
                 }
-
-                if (fullText) {
-                    currentAlertText = fullText;
-                    saveToHistory(fullText, fileName);
-                    setLoading(false);
-                    pendingBlob = null;
-                }
-            } catch (err) {
-                const rawErr = parseErrorMessage(err);
-                showError("Error de IA: " + rawErr);
-                if (rawErr.includes('403') || rawErr.includes('key')) {
-                    pendingBlob = blob;
-                    pendingFileName = fileName;
-                }
+                alertContent.innerText = fullText;
             }
-        };
+        }
+
+        if (fullText) {
+            currentAlertText = fullText;
+            saveToHistory(fullText, fileName);
+            setLoading(false);
+            pendingBlob = null;
+        }
     } catch (err) {
-        showError("Error al procesar: " + err.message);
+        const rawErr = parseErrorMessage(err);
+        showError("Error de IA: " + rawErr);
+        if (rawErr.includes('403') || rawErr.toLowerCase().includes('key')) {
+            pendingBlob = blob;
+            pendingFileName = fileName;
+        }
+    } finally {
+        // Limpieza: borra el archivo remoto para no consumir cuota/retención (si es posible).
+        if (uploadedFile?.name) {
+            try { await ai.files.delete({ name: uploadedFile.name }); } catch (e) { /* ignore */ }
+        }
     }
 }
+
 
 // --- Listeners ---
 btnRecord.addEventListener('click', async () => {
@@ -556,8 +575,8 @@ btnStop.addEventListener('click', () => {
 fileInput.addEventListener('change', (e) => {
     const file = e.target.files[0];
     if (file) {
-        if (file.size > 15 * 1024 * 1024) {
-            showError("Archivo muy grande (>15MB).", true);
+        if (file.size > 120 * 1024 * 1024) {
+            showError("Archivo muy grande (>120MB).", true);
             return;
         }
         processAudio(file, file.name);
