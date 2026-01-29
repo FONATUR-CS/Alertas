@@ -389,44 +389,100 @@ async function processAudio(blob, fileName = "Audio Institucional") {
             const ai = new GoogleGenAI({ apiKey });
 
             const prompt = `
-              Actúa como un redactor senior de Comunicación Social de FONATUR. Tu tarea es escuchar el audio y generar una 'Alerta de Prensa' fidedigna.
+ ACTÚA COMO:
+Redactor/a senior de Comunicación Social de FONATUR.
 
-              REGLAS DE ORO (VERACIDAD):
-              1. **LEALTAD AL AUDIO**: NO agregues información, datos o contexto que no aparezcan en el audio. Si el audio no lo menciona, tú no lo escribes.
-              2. **IDENTIFICACIÓN DE VOZ**: Identifica con precisión a la Presidenta Claudia Sheinbaum Pardo y a otros funcionarios si son reconocibles por su voz.
-              3. **ESTILO**: Formal, institucional y periodístico.
-              4. **AUDIO POCO CLARO**: Si hay fragmentos inaudibles o ambiguos, omite esa información. Nunca inventes ni supongas datos.
+OBJETIVO:
+Escuchar el audio proporcionado y generar una “Alerta de Prensa” fidedigna (solo con información explícita en el audio), con longitud proporcional al tamaño y densidad del audio.
 
-              REGLAS DE FORMATO CRÍTICAS:
-              1. **ENCABEZADO**: El encabezado (Ej: *Alerta de prensa de la Presidenta Claudia Sheinbaum Pardo*) debe llevar exactamente un asterisco (*) al inicio y uno al final. 
-              2. **FECHA**: La fecha DEBE SER EXACTAMENTE: ${systemDate}. NO debe llevar asteriscos ni ningún otro formato. Texto plano únicamente.
-              3. **TITULAR**: El titular resumen debe llevar un asterisco (*) al inicio y uno al final (Ej: *México impulsa el desarrollo ferroviario*).
-              4. **CUERPO DE LA ALERTA**: Los párrafos de desarrollo NO deben contener ningún asterisco ni formato Markdown. Texto plano.
+PRINCIPIOS DE VERACIDAD (NO NEGOCIABLES):
+1) LEALTAD ABSOLUTA AL AUDIO:
+   - No inventes, no completes, no contextualices con conocimientos externos.
+   - Si un dato (fecha, lugar, cifra, nombre, cargo, dependencia, acción) no se escucha con claridad, NO lo escribas.
+2) INCERTIDUMBRE = OMISIÓN:
+   - Si hay fragmentos ambiguos o inaudibles, omite esa información por completo.
+   - No uses marcadores tipo [inaudible] en el cuerpo. Simplemente no incluyas lo dudoso.
+3) IDENTIFICACIÓN DE VOCES (REGLA ESTRICTA):
+   - Solo atribuye una voz a una persona si el audio lo dice explícitamente (ej. “Soy…”, “La Presidenta…”, “Me acompaña…”),
+     o si el archivo/metadata/introducción del audio lo afirma de forma directa.
+   - Si NO hay confirmación explícita, usa atribuciones neutrales: “la oradora”, “el orador”, “una funcionaria”, “un funcionario”.
+   - Prohibido “reconocer por la voz” sin confirmación textual del propio audio.
 
-              REGLAS DE REDACCIÓN:
-              1. **LONGITUD**: Máximo 4 párrafos en el cuerpo de la alerta (sin contar encabezado ni titular).
-              2. **NOMBRES OFICIALES**: La primera mención de instituciones debe usar el nombre completo (ej: "Fondo Nacional de Fomento al Turismo" antes de "FONATUR").
+ESTILO:
+Formal, institucional y periodístico. Redacción clara y sobria. Sin adjetivos promocionales no dichos en el audio.
 
-              ${trainingContext}
+REGLAS DE FORMATO (CRÍTICAS, VALIDAR ANTES DE ENTREGAR):
+A) Salida SIN Markdown (excepto los asteriscos que se indican).
+B) ENCABEZADO:
+   - Debe ir en una sola línea y llevar EXACTAMENTE un asterisco (*) al inicio y uno al final.
+C) FECHA:
+   - La fecha DEBE SER EXACTAMENTE: ${systemDate}
+   - Texto plano, sin asteriscos, sin comillas, sin palabras extra.
+D) TITULAR:
+   - Debe ir en una sola línea y llevar EXACTAMENTE un asterisco (*) al inicio y uno al final.
+E) CUERPO:
+   - Máximo 4 párrafos.
+   - Texto plano: NO usar asteriscos, NO viñetas, NO numeración, NO encabezados internos.
+F) CIERRE INSTITUCIONAL:
+   - Un último renglón o párrafo breve, solo si está sustentado por el audio.
+   - Texto plano, sin asteriscos.
 
-              ESTRUCTURA OBLIGATORIA:
-              ---
-              *[ENCABEZADO INSTITUCIONAL SEGÚN EL ORADOR]*
-              ${systemDate}
+REGLA DE LONGITUD ADAPTATIVA (SEGÚN AUDIO):
+1) Determina la “escala” del audio por duración y densidad informativa:
+   - AUDIO CORTO: <= 45 segundos O contiene 1–2 hechos principales.
+   - AUDIO MEDIO: 46 segundos a 2:30 min O contiene 3–5 hechos principales.
+   - AUDIO LARGO: > 2:30 min O contiene 6+ hechos principales, múltiples temas, cifras, anuncios o acuerdos.
+2) Ajusta la extensión manteniendo el límite de 4 párrafos:
+   - AUDIO CORTO: 1–2 párrafos de cuerpo, concisos (2–4 oraciones por párrafo).
+   - AUDIO MEDIO: 2–3 párrafos de cuerpo (3–5 oraciones por párrafo).
+   - AUDIO LARGO: 3–4 párrafos de cuerpo, desarrollados (4–7 oraciones por párrafo), incorporando la mayor cantidad de hechos verificables del audio sin repetir.
+3) Prohibido alargar con relleno:
+   - No repitas ideas ni uses frases genéricas para “estirar” el texto.
+   - Cada oración debe corresponder a un hecho explícito del audio.
 
-              *[TITULAR RESUMEN]*
+REGLAS DE REDACCIÓN:
+1) Precisión: Mantén el orden lógico de lo dicho (qué se informó / detalles verificables / implicaciones inmediatas expresadas en el audio / siguientes pasos mencionados).
+2) NOMBRES OFICIALES:
+   - Primera mención: nombre completo de instituciones. Después, siglas entre paréntesis.
+   - Ejemplo: “Fondo Nacional de Fomento al Turismo (FONATUR)”.
+3) Nombres y cargos:
+   - Solo incluye nombres/cargos confirmados claramente en el audio.
+   - Si no es claro, omítelo o usa genérico sin inventar dependencia.
 
-              [Cuerpo de la alerta: Texto plano sin asteriscos, Máximo 4 párrafos en texto plano sin asteriscos, organizado claramente, fiel al audio].
+CONTEXTO DE ENTRENAMIENTO (SI APLICA):
+${trainingContext}
 
-              [Cierre institucional basado en el audio, sin asteriscos].
-              ---
+PROCESO OBLIGATORIO (INTERNO, PERO APLICAR):
+1) Extrae hechos verificables del audio (quién, qué, dónde, cuándo, cifras, acuerdos, acciones y próximos pasos).
+2) Clasifica el audio: CORTO / MEDIO / LARGO con base en la regla de longitud adaptativa.
+3) Redacta la alerta usando SOLO esos hechos y aplicando la longitud correspondiente.
+4) Revisa checklist final:
+   - Encabezado con un asterisco al inicio y uno al final.
+   - Fecha exactamente ${systemDate} en texto plano.
+   - Titular con un asterisco al inicio y uno al final.
+   - Cuerpo: máximo 4 párrafos, sin asteriscos, sin listas.
+   - Sin datos no confirmados por el audio.
 
-              Instrucciones Finales: Entrega solo el texto resultante en español. La fecha debe ser exactamente la que te proporcioné.
+ESTRUCTURA OBLIGATORIA DE SALIDA (COPIAR TAL CUAL):
+---
+*[ENCABEZADO INSTITUCIONAL SEGÚN EL ORADOR CONFIRMADO O GENÉRICO]*
+${systemDate}
+
+*[TITULAR RESUMEN]*
+
+[Cuerpo: 1 a 4 párrafos según escala CORTO/MEDIO/LARGO, texto plano, fiel al audio, sin asteriscos.]
+
+[Cierre institucional sustentado por el audio, texto plano, sin asteriscos.]
+---
+
+INSTRUCCIÓN FINAL:
+Entrega SOLO el texto final en español, siguiendo la estructura exacta. La fecha debe ser exactamente ${systemDate}.
+
             `;
 
             try {
                 const responseStream = await ai.models.generateContentStream({
-                    model: 'gemini-3-flash-preview',
+                    model: 'gemini-3-flash-pro-preview',
                     contents: {
                         parts: [
                             { inlineData: { data: base64Data, mimeType: mimeType } },
