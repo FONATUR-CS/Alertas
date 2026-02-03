@@ -29,9 +29,6 @@ const btnSaveKey = document.getElementById('btn-save-key');
 const trainingModal = document.getElementById('training-modal');
 const trainingInput = document.getElementById('training-input');
 const btnSaveTraining = document.getElementById('btn-save-training');
-const btnExportTraining = document.getElementById('btn-export-training');
-const inputImportTraining = document.getElementById('input-import-training');
-const btnCloseTraining = document.getElementById('btn-close-training');
 
 const emptyState = document.getElementById('empty-state');
 const loadingState = document.getElementById('loading-state');
@@ -48,9 +45,7 @@ const historyEmpty = document.getElementById('history-empty');
 
 // --- Initialization ---
 document.addEventListener('DOMContentLoaded', () => {
-    if (window.lucide) {
-        window.lucide.createIcons();
-    }
+    if (window.lucide) window.lucide.createIcons();
     loadHistory();
     checkApiKey();
     loadTrainingData();
@@ -106,18 +101,15 @@ async function loadTrainingData() {
             }
         }
     } catch (e) {
-        console.warn("Usando caché local para el estilo.");
+        console.warn("Usando caché local.");
     }
     const examples = localStorage.getItem('fonatur_style_examples');
     if (examples) trainingInput.value = examples;
 }
 
-btnTraining.addEventListener('click', () => trainingModal.classList.remove('hidden'));
-btnCloseTraining.addEventListener('click', () => trainingModal.classList.add('hidden'));
-
 btnSaveTraining.addEventListener('click', () => {
     localStorage.setItem('fonatur_style_examples', trainingInput.value);
-    trainingModal.classList.add('hidden');
+    document.getElementById('training-modal').classList.add('hidden');
     showError("Estilo guardado.", false);
     setTimeout(() => errorBanner.classList.add('hidden'), 2000);
 });
@@ -150,12 +142,11 @@ function renderHistory() {
         historyEmpty.classList.add('hidden');
         btnClearHistory.classList.remove('hidden');
 
-        history.forEach((item, index) => {
+        history.forEach((item) => {
             const btn = document.createElement('div');
-            btn.className = "w-full cursor-grab active:cursor-grabbing p-3 rounded-lg bg-[#13322b]/40 hover:bg-[#13322b] border border-[#1a3d35] transition-all group mb-2 relative";
-            btn.draggable = true;
+            btn.className = "w-full cursor-pointer p-3 rounded-lg bg-[#13322b]/40 hover:bg-[#13322b] border border-[#1a3d35] transition-all group mb-2";
             btn.innerHTML = `
-                <div class="pointer-events-none">
+                <div>
                     <p class="text-[10px] text-[#bd9751] font-bold mb-1 opacity-70">${new Date(item.timestamp).toLocaleDateString('es-MX')}</p>
                     <p class="text-sm font-medium line-clamp-2 text-gray-300 group-hover:text-white">${item.audioName || "Comunicado"}</p>
                 </div>
@@ -225,8 +216,10 @@ function showError(msg, isError = true) {
 
 function parseErrorMessage(err) {
     let raw = err.message || "Error desconocido";
+    // Si es un error 404, imprimimos más detalle en consola para ti
+    console.error("Detalle del error de Gemini:", err);
+    if (raw.includes('404')) return "Modelo no encontrado. Verifica si el nombre 'gemini-1.5-flash' es correcto para tu zona.";
     if (raw.includes('expired') || raw.includes('401')) return "API Key expirada. Por favor renuévala.";
-    if (raw.includes('404')) return "Modelo no encontrado. Usando versión de respaldo...";
     return raw;
 }
 
@@ -266,34 +259,33 @@ async function processAudio(blob, fileName = "Audio Institucional") {
     let uploadedFile = null;
 
     try {
-        // 1. Subida del archivo
-        updateProgress(15, "Subiendo audio a la nube...");
+        updateProgress(15, "Subiendo audio...");
         uploadedFile = await ai.files.upload({
             file: blob,
             config: { mimeType }
         });
 
-        // 2. Polling: Esperar a que el archivo esté ACTIVE
-        updateProgress(30, "Gemini está procesando el audio...");
+        updateProgress(30, "Esperando procesamiento del servidor...");
         let fileStatus = await ai.files.get({ name: uploadedFile.name });
         
+        // Polling para asegurar que el archivo esté ACTIVE
         while (fileStatus.state === "PROCESSING") {
-            await new Promise(resolve => setTimeout(resolve, 2000));
+            await new Promise(resolve => setTimeout(resolve, 2500));
             fileStatus = await ai.files.get({ name: uploadedFile.name });
         }
 
-        if (fileStatus.state === "FAILED") throw new Error("Fallo al procesar el archivo en el servidor.");
+        if (fileStatus.state === "FAILED") throw new Error("Error en procesamiento de archivo.");
 
-        updateProgress(60, "Redactando Alerta de Prensa...");
+        updateProgress(60, "Redactando contenido...");
 
-        // Inserta tu prompt aquí
+        // RECUERDA: PEGA AQUÍ TU PROMPT COMPLETO ORIGINAL
         const prompt = `ACTÚA COMO: Redactor/a senior de Comunicación Social de FONATUR. 
         OBJETIVO: Generar una “Alerta de Prensa” fidedigna usando la fecha ${systemDate} y el contexto ${trainingContext}. 
-        (Sigue las reglas de formato que definiste originalmente)`;
+        Sigue las reglas de formato de asteriscos y párrafos que definimos.`;
 
-        // 3. Generación con Gemini 1.5 Flash (Más estable para Web Apps)
+        // CAMBIO CRÍTICO: Usamos el ID de modelo estándar
         const responseStream = await ai.models.generateContentStream({
-            model: 'gemini-1.5-flash',
+            model: 'gemini-1.5-flash', 
             contents: createUserContent([
                 createPartFromUri(uploadedFile.uri, fileStatus.mimeType || mimeType),
                 prompt
@@ -327,10 +319,8 @@ async function processAudio(blob, fileName = "Audio Institucional") {
     } catch (err) {
         const rawErr = parseErrorMessage(err);
         showError("Error de IA: " + rawErr);
-        if (rawErr.toLowerCase().includes('key') || rawErr.includes('expir')) {
+        if (rawErr.toLowerCase().includes('key') || rawErr.includes('401')) {
             localStorage.removeItem('fonatur_gemini_key');
-            pendingBlob = blob;
-            pendingFileName = fileName;
             showModal();
         }
     } finally {
@@ -340,7 +330,7 @@ async function processAudio(blob, fileName = "Audio Institucional") {
     }
 }
 
-// --- Listeners (Resto del código original) ---
+// --- Listeners ---
 btnRecord.addEventListener('click', async () => {
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
