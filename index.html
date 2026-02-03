@@ -16,7 +16,7 @@
     <script type="importmap">
     {
       "imports": {
-        "@google/genai": "https://esm.run/@google/genai@0.21.0"
+        "@google/genai": "https://cdn.skypack.dev/@google/genai@0.21.0"
       }
     }
     </script>
@@ -81,17 +81,17 @@
 
     <div id="api-modal" class="hidden fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
         <div class="bg-[#0b231e] border border-[#1a3d35] p-6 rounded-lg w-full max-w-xs">
-            <h3 class="text-[#bd9751] font-bold mb-4 text-xs uppercase">Configuración de API</h3>
-            <input type="password" id="api-key-input" placeholder="Pegue su API Key..." class="w-full bg-black border border-gray-700 p-3 rounded text-sm text-white mb-4 outline-none">
+            <h3 class="text-[#bd9751] font-bold mb-4 text-xs uppercase">API Key</h3>
+            <input type="password" id="api-key-input" class="w-full bg-black border border-gray-700 p-3 rounded text-sm text-white mb-4 outline-none">
             <button id="btn-save-key" class="w-full bg-[#bd9751] text-black py-2 rounded font-bold text-xs uppercase">Guardar</button>
         </div>
     </div>
 
     <div id="training-modal" class="hidden fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
-        <div class="bg-[#0b231e] border border-[#1a3d35] p-6 rounded-lg w-full max-w-xl flex flex-col h-3/4">
+        <div class="bg-[#0b231e] border border-[#1a3d35] p-6 rounded-lg w-full max-w-xl h-3/4 flex flex-col">
             <h3 class="text-[#bd9751] font-bold mb-4 text-xs uppercase">Estilo de Referencia</h3>
             <textarea id="training-input" class="flex-1 bg-black border border-gray-700 p-4 rounded text-xs text-gray-300 font-mono resize-none"></textarea>
-            <button id="btn-save-training" class="w-full bg-[#bd9751] text-black py-2 rounded font-bold text-xs uppercase mt-4">Guardar Estilo</button>
+            <button id="btn-save-training" class="w-full bg-[#bd9751] text-black py-2 rounded font-bold text-xs uppercase mt-4">Guardar</button>
         </div>
     </div>
 
