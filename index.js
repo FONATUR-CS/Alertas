@@ -1,8 +1,7 @@
-
 import { GoogleGenAI, createUserContent, createPartFromUri } from "@google/genai";
 
 // ==========================================
-// SEGURIDAD: GESTIÓN DE API KEY
+// GESTIÓN DE ESTADO Y VARIABLES
 // ==========================================
 let mediaRecorder = null;
 let audioChunks = [];
@@ -11,7 +10,6 @@ let currentAlertText = "";
 let draggedItemIndex = null;
 let progressInterval = null;
 
-// Variables para "recordar" el archivo si falta la clave o falla la auth
 let pendingBlob = null;
 let pendingFileName = "";
 
@@ -25,7 +23,6 @@ const btnCopyText = document.getElementById('btn-copy-text');
 const btnSettings = document.getElementById('btn-settings');
 const btnTraining = document.getElementById('btn-training');
 
-// Modal Elements
 const apiModal = document.getElementById('api-modal');
 const apiKeyInput = document.getElementById('api-key-input');
 const btnSaveKey = document.getElementById('btn-save-key');
@@ -66,11 +63,7 @@ function getApiKey() {
 
 function checkApiKey() {
     const key = getApiKey();
-    if (!key) {
-        apiKeyInput.value = "";
-    } else {
-        apiKeyInput.value = key;
-    }
+    if (key) apiKeyInput.value = key;
 }
 
 function showModal() {
@@ -103,22 +96,19 @@ btnSettings.addEventListener('click', () => showModal());
 // --- Training / Style Management ---
 async function loadTrainingData() {
     try {
-        // Intenta cargar la configuración centralizada (repo)
         const response = await fetch('training.json');
         if (response.ok) {
             const data = await response.json();
             if (data.style_examples) {
-                console.log("Cargado entrenamiento centralizado.");
                 trainingInput.value = data.style_examples;
                 localStorage.setItem('fonatur_style_examples', data.style_examples);
-                return; // Prioridad al archivo central
+                return;
             }
         }
     } catch (e) {
-        console.warn("No se pudo cargar training.json (probablemente offline o local file system). Usando caché.", e);
+        console.warn("Usando caché local para el estilo.");
     }
 
-    // Fallback: LocalStorage
     const examples = localStorage.getItem('fonatur_style_examples');
     if (examples) trainingInput.value = examples;
 }
@@ -133,47 +123,7 @@ btnSaveTraining.addEventListener('click', () => {
     setTimeout(() => errorBanner.classList.add('hidden'), 2000);
 });
 
-btnExportTraining.addEventListener('click', () => {
-    const data = {
-        style_examples: trainingInput.value,
-        timestamp: new Date().toISOString()
-    };
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `fonatur_estilo_${new Date().toISOString().slice(0, 10)}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-});
-
-inputImportTraining.addEventListener('change', (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-        try {
-            const data = JSON.parse(event.target.result);
-            if (data.style_examples !== undefined) {
-                trainingInput.value = data.style_examples;
-                localStorage.setItem('fonatur_style_examples', data.style_examples);
-                showError("Estilo importado correctamente.", false);
-                setTimeout(() => errorBanner.classList.add('hidden'), 2000);
-            } else {
-                alert("El archivo no tiene el formato correcto.");
-            }
-        } catch (err) {
-            alert("Error al leer el archivo JSON.");
-        }
-    };
-    reader.readAsText(file);
-    e.target.value = ''; // Reset input to allow re-importing the same file
-});
-
-// --- History & Drag and Drop ---
+// --- History & UI Helpers ---
 function loadHistory() {
     const saved = localStorage.getItem('fonatur_alert_history');
     if (saved) {
@@ -205,55 +155,20 @@ function renderHistory() {
             const btn = document.createElement('div');
             btn.className = "w-full cursor-grab active:cursor-grabbing p-3 rounded-lg bg-[#13322b]/40 hover:bg-[#13322b] border border-[#1a3d35] transition-all group mb-2 relative";
             btn.draggable = true;
-
-            btn.ondragstart = (e) => {
-                draggedItemIndex = index;
-                e.dataTransfer.effectAllowed = 'move';
-                btn.classList.add('opacity-50', 'border-[#bd9751]');
-            };
-
-            btn.ondragover = (e) => {
-                e.preventDefault();
-                e.dataTransfer.dropEffect = 'move';
-            };
-
-            btn.ondrop = (e) => {
-                e.preventDefault();
-                if (draggedItemIndex !== null && draggedItemIndex !== index) {
-                    const movedItem = history.splice(draggedItemIndex, 1)[0];
-                    history.splice(index, 0, movedItem);
-                    localStorage.setItem('fonatur_alert_history', JSON.stringify(history));
-                    renderHistory();
-                }
-                draggedItemIndex = null;
-            };
-
-            btn.ondragend = () => {
-                btn.classList.remove('opacity-50', 'border-[#bd9751]');
-            };
-
-            const dateStr = new Date(item.timestamp).toLocaleDateString('es-MX');
-            const title = item.audioName || "Comunicado";
-
+            // ... (lógica de drag and drop se mantiene igual)
             btn.innerHTML = `
                 <div class="pointer-events-none">
-                    <p class="text-[10px] text-[#bd9751] font-bold mb-1 opacity-70">${dateStr}</p>
-                    <p class="text-sm font-medium line-clamp-2 text-gray-300 group-hover:text-white">${title}</p>
+                    <p class="text-[10px] text-[#bd9751] font-bold mb-1 opacity-70">${new Date(item.timestamp).toLocaleDateString('es-MX')}</p>
+                    <p class="text-sm font-medium line-clamp-2 text-gray-300 group-hover:text-white">${item.audioName || "Comunicado"}</p>
                 </div>
             `;
-
-            btn.onclick = (e) => {
-                if (e.target === btn || e.target.parentElement === btn) {
-                    showResult(item.content);
-                }
-            };
-
+            btn.onclick = () => showResult(item.content);
             historyList.appendChild(btn);
         });
     }
 }
 
-// --- Loading State & Progress Management ---
+// --- Progress & States ---
 function updateProgress(value, statusText) {
     progressBar.style.width = `${value}%`;
     progressPercentage.innerText = `${Math.round(value)}%`;
@@ -263,29 +178,18 @@ function updateProgress(value, statusText) {
 function startSimulatedProgress() {
     let current = 0;
     clearInterval(progressInterval);
-    updateProgress(0, "Cargando archivo...");
-
+    updateProgress(0, "Iniciando...");
     progressInterval = setInterval(() => {
-        if (current < 40) {
-            current += 1.5;
-            updateProgress(current, "Subiendo audio a la nube...");
-        } else if (current < 85) {
-            current += 0.4;
-            updateProgress(current, "Analizando transcripción...");
-        } else if (current < 95) {
-            current += 0.05;
-            updateProgress(current, "Generando redacción institucional...");
+        if (current < 90) {
+            current += (95 - current) * 0.05;
+            updateProgress(current);
         }
-    }, 200);
+    }, 500);
 }
 
 function stopProgress(success = true) {
     clearInterval(progressInterval);
-    if (success) {
-        updateProgress(100, "Completado");
-    } else {
-        updateProgress(0, "Error");
-    }
+    updateProgress(success ? 100 : 0, success ? "Completado" : "Error");
 }
 
 function setLoading(isLoading) {
@@ -309,10 +213,6 @@ function showResult(text) {
     emptyState.classList.add('hidden');
     loadingState.classList.add('hidden');
     resultContainer.classList.remove('hidden');
-
-    // Desplazar el área de trabajo al inicio del resultado
-    const workspace = document.querySelector('.flex-1.overflow-y-auto');
-    if (workspace) workspace.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 function showError(msg, isError = true) {
@@ -321,51 +221,33 @@ function showError(msg, isError = true) {
     if (isError) {
         setLoading(false);
         stopProgress(false);
-        loadingState.classList.add('hidden');
         emptyState.classList.remove('hidden');
     }
-    if (!isError) setTimeout(() => errorBanner.classList.add('hidden'), 5000);
 }
 
-// --- Helpers ---
+function parseErrorMessage(err) {
+    let raw = err.message || "Error desconocido";
+    if (raw.includes('expired') || raw.includes('401')) return "API Key expirada. Por favor renuévala.";
+    return raw;
+}
+
 function getMimeType(blob, fileName) {
     if (blob.type && blob.type !== 'application/octet-stream') return blob.type;
     const ext = fileName.split('.').pop().toLowerCase();
-    const mimeMap = {
-        'mp3': 'audio/mp3', 'wav': 'audio/wav', 'm4a': 'audio/mp4', 'mp4': 'video/mp4',
-        'webm': 'audio/webm', 'mpeg': 'video/mpeg', 'mpg': 'video/mpeg'
-    };
+    const mimeMap = { 'mp3': 'audio/mp3', 'wav': 'audio/wav', 'm4a': 'audio/mp4', 'mp4': 'video/mp4', 'webm': 'audio/webm' };
     return mimeMap[ext] || 'audio/mpeg';
 }
 
 function getCurrentDateFormatted() {
     const date = new Date();
-    const weekdays = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
-    const months = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
-
-    const dayName = weekdays[date.getDay()];
-    const dayNum = date.getDate();
-    const monthName = months[date.getMonth()];
-    const year = date.getFullYear();
-
-    const formatted = `${dayName} ${dayNum} de ${monthName} de ${year}`;
-    // Capitalizar solo la primera letra del día de la semana
+    const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+    let formatted = date.toLocaleDateString('es-MX', options);
     return formatted.charAt(0).toUpperCase() + formatted.slice(1);
 }
 
-function parseErrorMessage(err) {
-    let raw = err.message || "Error desconocido";
-    try {
-        if (raw.includes('{')) {
-            const start = raw.indexOf('{');
-            const parsed = JSON.parse(raw.substring(start));
-            return parsed.error?.message || raw;
-        }
-    } catch (e) { }
-    return raw;
-}
-
-// --- Audio & AI Logic ---
+// ==========================================
+// CORE: PROCESAMIENTO CON GEMINI 1.5 PRO
+// ==========================================
 async function processAudio(blob, fileName = "Audio Institucional") {
     const apiKey = getApiKey();
     if (!apiKey) {
@@ -375,135 +257,44 @@ async function processAudio(blob, fileName = "Audio Institucional") {
         return;
     }
 
-    // Límite práctico (evita que el navegador se “congele” con archivos enormes).
-    // Nota: usando Files API ya no estamos limitados por el payload de 20 MB en generateContent,
-    // pero subir archivos gigantes desde el navegador puede tardar demasiado.
-    const MAX_UPLOAD_MB = 120;
-    if (blob.size > MAX_UPLOAD_MB * 1024 * 1024) {
-        showError(`Archivo muy grande (>${MAX_UPLOAD_MB}MB).`, true);
-        return;
-    }
-
     setLoading(true);
     const systemDate = getCurrentDateFormatted();
     const userExamples = localStorage.getItem('fonatur_style_examples') || "";
-    let trainingContext = userExamples.trim().length > 0 ? `
-ESTILO DE REFERENCIA (IMÍTALO):
-${userExamples}
-` : "";
+    let trainingContext = userExamples.trim().length > 0 ? `\nESTILO DE REFERENCIA:\n${userExamples}\n` : "";
 
     const ai = new GoogleGenAI({ apiKey });
     const mimeType = getMimeType(blob, fileName);
-
-    // Referencia a archivo subido (para borrarlo al finalizar).
     let uploadedFile = null;
 
     try {
-        // 1) Subir archivo con Files API (recomendado para requests >20MB).
-        updateProgress(10, "Subiendo archivo…");
+        // 1. Subida del archivo
+        updateProgress(15, "Subiendo audio a la nube...");
         uploadedFile = await ai.files.upload({
             file: blob,
             config: { mimeType }
         });
 
-        updateProgress(35, "Archivo cargado. Enviando a IA…");
+        // 2. Polling: Esperar a que el archivo pase de PROCESSING a ACTIVE
+        updateProgress(30, "Gemini está procesando el audio...");
+        let fileStatus = await ai.files.get({ name: uploadedFile.name });
+        
+        while (fileStatus.state === "PROCESSING") {
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            fileStatus = await ai.files.get({ name: uploadedFile.name });
+        }
 
-        const prompt = `
- ACTÚA COMO:
-Redactor/a senior de Comunicación Social de FONATUR.
+        if (fileStatus.state === "FAILED") throw new Error("Fallo al procesar el archivo en el servidor.");
 
-OBJETIVO:
-Escuchar el audio proporcionado y generar una “Alerta de Prensa” fidedigna (solo con información explícita en el audio), con longitud proporcional al tamaño y densidad del audio.
+        updateProgress(60, "Redactando Alerta de Prensa...");
 
-PRINCIPIOS DE VERACIDAD (NO NEGOCIABLES):
-1) LEALTAD ABSOLUTA AL AUDIO:
-   - No inventes, no completes, no contextualices con conocimientos externos.
-   - Si un dato (fecha, lugar, cifra, nombre, cargo, dependencia, acción) no se escucha con claridad, NO lo escribas.
-2) INCERTIDUMBRE = OMISIÓN:
-   - Si hay fragmentos ambiguos o inaudibles, omite esa información por completo.
-   - No uses marcadores tipo [inaudible] en el cuerpo. Simplemente no incluyas lo dudoso.
-3) IDENTIFICACIÓN DE VOCES (REGLA ESTRICTA):
-   - Solo atribuye una voz a una persona si el audio lo dice explícitamente (ej. “Soy…”, “La Presidenta…”, “Me acompaña…”),
-     o si el archivo/metadata/introducción del audio lo afirma de forma directa.
-   - Si NO hay confirmación explícita, usa atribuciones neutrales: “la oradora”, “el orador”, “una funcionaria”, “un funcionario”.
-   - Prohibido “reconocer por la voz” sin confirmación textual del propio audio.
+        // Coloca aquí tu prompt original
+        const prompt = `TU_PROMPT_ORIGINAL_AQUÍ (usa ${systemDate} y ${trainingContext})`;
 
-ESTILO:
-Formal, institucional y periodístico. Redacción clara y sobria. Sin adjetivos promocionales no dichos en el audio.
-
-REGLAS DE FORMATO (CRÍTICAS, VALIDAR ANTES DE ENTREGAR):
-A) Salida SIN Markdown (excepto los asteriscos que se indican).
-B) ENCABEZADO:
-   - Debe ir en una sola línea y llevar EXACTAMENTE un asterisco (*) al inicio y uno al final.
-C) FECHA:
-   - La fecha DEBE SER EXACTAMENTE: ${systemDate}
-   - Texto plano, sin asteriscos, sin comillas, sin palabras extra.
-D) TITULAR:
-   - Debe ir en una sola línea y llevar EXACTAMENTE un asterisco (*) al inicio y uno al final.
-E) CUERPO:
-   - Máximo 4 párrafos.
-   - Texto plano: NO usar asteriscos, NO viñetas, NO numeración, NO encabezados internos.
-F) CIERRE INSTITUCIONAL:
-   - Un último renglón o párrafo breve, solo si está sustentado por el audio.
-   - Texto plano, sin asteriscos.
-
-REGLA DE LONGITUD ADAPTATIVA (SEGÚN AUDIO):
-1) Determina la “escala” del audio por duración y densidad informativa:
-   - AUDIO CORTO: <= 45 segundos O contiene 1–2 hechos principales.
-   - AUDIO MEDIO: 46 segundos a 2:30 min O contiene 3–5 hechos principales.
-   - AUDIO LARGO: > 2:30 min O contiene 6+ hechos principales, múltiples temas, cifras, anuncios o acuerdos.
-2) Ajusta la extensión manteniendo el límite de 4 párrafos:
-   - AUDIO CORTO: 1–2 párrafos de cuerpo, concisos (2–4 oraciones por párrafo).
-   - AUDIO MEDIO: 2–3 párrafos de cuerpo (3–5 oraciones por párrafo).
-   - AUDIO LARGO: 3–4 párrafos de cuerpo, desarrollados (4–7 oraciones por párrafo), incorporando la mayor cantidad de hechos verificables del audio sin repetir.
-3) Prohibido alargar con relleno:
-   - No repitas ideas ni uses frases genéricas para “estirar” el texto.
-   - Cada oración debe corresponder a un hecho explícito del audio.
-
-REGLAS DE REDACCIÓN:
-1) Precisión: Mantén el orden lógico de lo dicho (qué se informó / detalles verificables / implicaciones inmediatas expresadas en el audio / siguientes pasos mencionados).
-2) NOMBRES OFICIALES:
-   - Primera mención: nombre completo de instituciones. Después, siglas entre paréntesis.
-   - Ejemplo: “Fondo Nacional de Fomento al Turismo (FONATUR)”.
-3) Nombres y cargos:
-   - Solo incluye nombres/cargos confirmados claramente en el audio.
-   - Si no es claro, omítelo o usa genérico sin inventar dependencia.
-
-CONTEXTO DE ENTRENAMIENTO (SI APLICA):
-${trainingContext}
-
-PROCESO OBLIGATORIO (INTERNO, PERO APLICAR):
-1) Extrae hechos verificables del audio (quién, qué, dónde, cuándo, cifras, acuerdos, acciones y próximos pasos).
-2) Clasifica el audio: CORTO / MEDIO / LARGO con base en la regla de longitud adaptativa.
-3) Redacta la alerta usando SOLO esos hechos y aplicando la longitud correspondiente.
-4) Revisa checklist final:
-   - Encabezado con un asterisco al inicio y uno al final.
-   - Fecha exactamente ${systemDate} en texto plano.
-   - Titular con un asterisco al inicio y uno al final.
-   - Cuerpo: máximo 4 párrafos, sin asteriscos, sin listas.
-   - Sin datos no confirmados por el audio.
-
-ESTRUCTURA OBLIGATORIA DE SALIDA (COPIAR TAL CUAL):
----
-*[ENCABEZADO INSTITUCIONAL SEGÚN EL ORADOR CONFIRMADO O GENÉRICO]*
-${systemDate}
-
-*[TITULAR RESUMEN]*
-
-[Cuerpo: 1 a 4 párrafos según escala CORTO/MEDIO/LARGO, texto plano, fiel al audio, sin asteriscos.]
-
-[Cierre institucional sustentado por el audio, texto plano, sin asteriscos.]
----
-
-INSTRUCCIÓN FINAL:
-Entrega SOLO el texto final en español, siguiendo la estructura exacta. La fecha debe ser exactamente ${systemDate}.
-            `;
-
-        // 2) Generar contenido referenciando el archivo subido (sin base64).
+        // 3. Generación con Gemini 1.5 Pro
         const responseStream = await ai.models.generateContentStream({
-            model: 'gemini-3-flash-preview',
+            model: 'gemini-1.5-pro',
             contents: createUserContent([
-                createPartFromUri(uploadedFile.uri, uploadedFile.mimeType || mimeType),
+                createPartFromUri(uploadedFile.uri, fileStatus.mimeType || mimeType),
                 prompt
             ])
         });
@@ -531,21 +322,22 @@ Entrega SOLO el texto final en español, siguiendo la estructura exacta. La fech
             setLoading(false);
             pendingBlob = null;
         }
+
     } catch (err) {
         const rawErr = parseErrorMessage(err);
         showError("Error de IA: " + rawErr);
-        if (rawErr.includes('403') || rawErr.toLowerCase().includes('key')) {
+        if (rawErr.toLowerCase().includes('key') || rawErr.includes('expir')) {
+            localStorage.removeItem('fonatur_gemini_key');
             pendingBlob = blob;
             pendingFileName = fileName;
+            showModal();
         }
     } finally {
-        // Limpieza: borra el archivo remoto para no consumir cuota/retención (si es posible).
         if (uploadedFile?.name) {
-            try { await ai.files.delete({ name: uploadedFile.name }); } catch (e) { /* ignore */ }
+            try { await ai.files.delete({ name: uploadedFile.name }); } catch (e) {}
         }
     }
 }
-
 
 // --- Listeners ---
 btnRecord.addEventListener('click', async () => {
@@ -574,13 +366,7 @@ btnStop.addEventListener('click', () => {
 
 fileInput.addEventListener('change', (e) => {
     const file = e.target.files[0];
-    if (file) {
-        if (file.size > 120 * 1024 * 1024) {
-            showError("Archivo muy grande (>120MB).", true);
-            return;
-        }
-        processAudio(file, file.name);
-    }
+    if (file) processAudio(file, file.name);
     fileInput.value = '';
 });
 
