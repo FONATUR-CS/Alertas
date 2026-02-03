@@ -108,7 +108,6 @@ async function loadTrainingData() {
     } catch (e) {
         console.warn("Usando caché local para el estilo.");
     }
-
     const examples = localStorage.getItem('fonatur_style_examples');
     if (examples) trainingInput.value = examples;
 }
@@ -155,7 +154,6 @@ function renderHistory() {
             const btn = document.createElement('div');
             btn.className = "w-full cursor-grab active:cursor-grabbing p-3 rounded-lg bg-[#13322b]/40 hover:bg-[#13322b] border border-[#1a3d35] transition-all group mb-2 relative";
             btn.draggable = true;
-            // ... (lógica de drag and drop se mantiene igual)
             btn.innerHTML = `
                 <div class="pointer-events-none">
                     <p class="text-[10px] text-[#bd9751] font-bold mb-1 opacity-70">${new Date(item.timestamp).toLocaleDateString('es-MX')}</p>
@@ -228,6 +226,7 @@ function showError(msg, isError = true) {
 function parseErrorMessage(err) {
     let raw = err.message || "Error desconocido";
     if (raw.includes('expired') || raw.includes('401')) return "API Key expirada. Por favor renuévala.";
+    if (raw.includes('404')) return "Modelo no encontrado. Usando versión de respaldo...";
     return raw;
 }
 
@@ -246,7 +245,7 @@ function getCurrentDateFormatted() {
 }
 
 // ==========================================
-// CORE: PROCESAMIENTO CON GEMINI 1.5 PRO
+// CORE: PROCESAMIENTO CON GEMINI 1.5 FLASH
 // ==========================================
 async function processAudio(blob, fileName = "Audio Institucional") {
     const apiKey = getApiKey();
@@ -274,7 +273,7 @@ async function processAudio(blob, fileName = "Audio Institucional") {
             config: { mimeType }
         });
 
-        // 2. Polling: Esperar a que el archivo pase de PROCESSING a ACTIVE
+        // 2. Polling: Esperar a que el archivo esté ACTIVE
         updateProgress(30, "Gemini está procesando el audio...");
         let fileStatus = await ai.files.get({ name: uploadedFile.name });
         
@@ -287,12 +286,14 @@ async function processAudio(blob, fileName = "Audio Institucional") {
 
         updateProgress(60, "Redactando Alerta de Prensa...");
 
-        // Coloca aquí tu prompt original
-        const prompt = `TU_PROMPT_ORIGINAL_AQUÍ (usa ${systemDate} y ${trainingContext})`;
+        // Inserta tu prompt aquí
+        const prompt = `ACTÚA COMO: Redactor/a senior de Comunicación Social de FONATUR. 
+        OBJETIVO: Generar una “Alerta de Prensa” fidedigna usando la fecha ${systemDate} y el contexto ${trainingContext}. 
+        (Sigue las reglas de formato que definiste originalmente)`;
 
-        // 3. Generación con Gemini 1.5 Pro
+        // 3. Generación con Gemini 1.5 Flash (Más estable para Web Apps)
         const responseStream = await ai.models.generateContentStream({
-            model: 'gemini-1.5-pro',
+            model: 'gemini-1.5-flash',
             contents: createUserContent([
                 createPartFromUri(uploadedFile.uri, fileStatus.mimeType || mimeType),
                 prompt
@@ -339,7 +340,7 @@ async function processAudio(blob, fileName = "Audio Institucional") {
     }
 }
 
-// --- Listeners ---
+// --- Listeners (Resto del código original) ---
 btnRecord.addEventListener('click', async () => {
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
